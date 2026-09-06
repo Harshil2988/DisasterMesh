@@ -1,0 +1,5 @@
+<resources>
+    <color name="ic_launcher_background">#0B3D5C</color>
+    <!-- Matches MeshColors.Background so launch does not flash a light window. -->
+    <color name="window_background">#050A14</color>
+</resources>

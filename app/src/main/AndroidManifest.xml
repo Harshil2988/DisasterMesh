@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Permissions required by Google Nearby Connections.
+      Nearby uses Bluetooth, BLE and Wi-Fi together, so the list is long.
+      Which ones are actually needed depends on the Android version of the phone.
+    -->
+
+    <!-- Old Bluetooth permissions: only used up to Android 11 (API 30). -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+
+    <!-- New Bluetooth permissions for Android 12+ (API 31+). These need a runtime prompt. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+
+    <!-- Wi-Fi state: normal permissions, granted automatically at install. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+
+    <!-- Location.
+         Nearby Connections in Google Play Services checks for ACCESS_COARSE_LOCATION on
+         EVERY Android version and fails with status 8034 without it, so this one must NOT
+         be capped with maxSdkVersion - capping it strips the permission from the APK and
+         the user is then never even offered a Location toggle in Settings.
+         ACCESS_FINE_LOCATION is only actually requested up to Android 12L (API 32), but it
+         stays declared so devices that ask for precise location can still be granted it. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Android 13+ (API 33+) replacement for location when using nearby Wi-Fi. -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.DisasterMesh">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.DisasterMesh">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
