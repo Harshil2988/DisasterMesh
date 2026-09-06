@@ -8,95 +8,178 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * The DisasterMesh palette: dark emergency-response console.
+ * DisasterMesh design system.
  *
- * One place for every colour so the screens stay consistent. Deliberately flat
- * colours rather than gradients — this has to stay readable in bad light.
+ * Direction: a calm, high-contrast dark console. Credible during an emergency
+ * rather than dramatic — colour is reserved for meaning, never decoration.
+ *
+ * Every colour has one semantic job. Components reference these tokens by name
+ * and never inline raw hex, so the palette stays consistent and changeable.
  */
-object MeshColors {
-    /** Page background: near-black navy. */
-    val Background = Color(0xFF050A14)
+object Mesh {
 
-    /** Card background. */
-    val Surface = Color(0xFF0C1524)
+    // --- Surfaces: four dark levels build hierarchy through contrast rather
+    // --- than through a border on every single card.
+    object Surface {
+        /** The page itself. Not pure black — keeps depth readable on OLED. */
+        val Backdrop = Color(0xFF020617)
 
-    /** Raised card / selected chip. */
-    val SurfaceHigh = Color(0xFF14243A)
+        /** Standard card. */
+        val Card = Color(0xFF0B1220)
 
-    /** Hairline borders around cards. */
-    val Border = Color(0xFF1E3350)
+        /** Raised or selected card. */
+        val Raised = Color(0xFF141B2D)
 
-    /** Primary accent — live mesh, links, active state. */
-    val Cyan = Color(0xFF22D3EE)
-    val CyanDim = Color(0xFF0E7490)
+        /** Pressed / track fill. */
+        val Sunken = Color(0xFF080D1A)
+    }
 
-    /** Emergency / SOS. */
-    val Red = Color(0xFFF43F5E)
-    val RedDeep = Color(0xFF9F1239)
+    /** Hairlines. Used sparingly — elevation is the primary separator. */
+    object Line {
+        val Subtle = Color(0xFF1B2537)
+        val Strong = Color(0xFF334155)
+    }
 
-    /** Caution. */
-    val Amber = Color(0xFFF59E0B)
+    object Text {
+        val Primary = Color(0xFFF8FAFC)
+        val Secondary = Color(0xFF94A3B8)
+        val Tertiary = Color(0xFF64748B)
 
-    /** Safe / connected. */
-    val Green = Color(0xFF22C55E)
+        /** For text sitting on a saturated fill. */
+        val OnAccent = Color(0xFF020617)
+    }
 
-    val TextPrimary = Color(0xFFE8F1FA)
-    val TextSecondary = Color(0xFF93AECB)
-    val TextDim = Color(0xFF5E7793)
+    /**
+     * Semantic accents. Named for what they MEAN, not what they look like, so a
+     * screen cannot accidentally use "the red one" for a non-emergency.
+     */
+    object Signal {
+        /** The mesh itself: active links, live network, primary accent. */
+        val Live = Color(0xFF38BDF8)
+        val LiveDeep = Color(0xFF0EA5E9)
+
+        /** Primary call to action. */
+        val Action = Color(0xFF2563EB)
+
+        /** Emergency / SOS only. */
+        val Emergency = Color(0xFFEF4444)
+        val EmergencyDeep = Color(0xFFB91C1C)
+
+        /** Caution: degraded, waiting, cached. */
+        val Warning = Color(0xFFF59E0B)
+
+        /** Healthy, connected, safe. */
+        val Ok = Color(0xFF22C55E)
+
+        /** Inactive / off. */
+        val Idle = Color(0xFF475569)
+    }
+
+    /**
+     * One spacing scale. Every gap and pad in the app comes from here, which is
+     * what stops the layout drifting into arbitrary padding values.
+     */
+    object Space {
+        val xs = 4.dp
+        val sm = 8.dp
+        val md = 12.dp
+        val lg = 16.dp
+        val xl = 20.dp
+        val xxl = 24.dp
+        val xxxl = 32.dp
+    }
+
+    object Radius {
+        val sm = 10.dp
+        val md = 14.dp
+        val lg = 18.dp
+        val xl = 24.dp
+    }
+
+    /** Android's minimum comfortable touch target. */
+    val TouchTarget = 48.dp
+
+    /** Node ids and coordinates: technical, fixed-width, still readable. */
+    val Mono = FontFamily.Monospace
 }
 
-private val DarkColors = darkColorScheme(
-    primary = MeshColors.Cyan,
-    onPrimary = MeshColors.Background,
-    secondary = MeshColors.Amber,
-    error = MeshColors.Red,
-    background = MeshColors.Background,
-    onBackground = MeshColors.TextPrimary,
-    surface = MeshColors.Surface,
-    onSurface = MeshColors.TextPrimary,
-    surfaceVariant = MeshColors.SurfaceHigh,
-    onSurfaceVariant = MeshColors.TextSecondary,
-    outline = MeshColors.Border
-)
-
+/**
+ * Type scale. Body sits at 15sp with generous line height; nothing readable
+ * drops below 12sp. Caps are reserved for short status labels only.
+ */
 private val MeshTypography = Typography(
+    displaySmall = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 30.sp,
+        lineHeight = 36.sp,
+        letterSpacing = (-0.5).sp
+    ),
     headlineMedium = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
-        fontSize = 26.sp,
-        letterSpacing = 1.sp
+        fontSize = 22.sp,
+        lineHeight = 28.sp
     ),
     titleMedium = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 16.sp,
-        letterSpacing = 0.8.sp
+        fontSize = 17.sp,
+        lineHeight = 24.sp
     ),
-    labelLarge = TextStyle(
+    bodyLarge = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Medium,
-        fontSize = 13.sp,
-        letterSpacing = 1.2.sp
+        fontSize = 16.sp,
+        lineHeight = 23.sp
     ),
     bodyMedium = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontSize = 14.sp,
-        lineHeight = 20.sp
+        fontSize = 15.sp,
+        lineHeight = 22.sp
+    ),
+    labelLarge = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 13.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.8.sp
     ),
     bodySmall = TextStyle(
         fontFamily = FontFamily.SansSerif,
+        fontSize = 13.sp,
+        lineHeight = 18.sp
+    ),
+    labelSmall = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
-        lineHeight = 17.sp
+        lineHeight = 16.sp,
+        letterSpacing = 0.4.sp
     )
 )
 
-/**
- * Always dark. This is an emergency console, not a themeable app, so it does not
- * follow the system light/dark setting.
- */
+private val DarkColors = darkColorScheme(
+    primary = Mesh.Signal.Live,
+    onPrimary = Mesh.Text.OnAccent,
+    secondary = Mesh.Signal.Action,
+    onSecondary = Mesh.Text.Primary,
+    error = Mesh.Signal.Emergency,
+    onError = Mesh.Text.Primary,
+    background = Mesh.Surface.Backdrop,
+    onBackground = Mesh.Text.Primary,
+    surface = Mesh.Surface.Card,
+    onSurface = Mesh.Text.Primary,
+    surfaceVariant = Mesh.Surface.Raised,
+    onSurfaceVariant = Mesh.Text.Secondary,
+    outline = Mesh.Line.Strong,
+    outlineVariant = Mesh.Line.Subtle
+)
+
+/** Dark only: an emergency console should not change appearance by system setting. */
 @Composable
 fun DisasterMeshTheme(content: @Composable () -> Unit) {
     MaterialTheme(

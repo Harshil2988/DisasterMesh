@@ -32,8 +32,24 @@ data class MeshMessage(
     val ttl: Int,
 
     /** How many relays the message has already passed through. Display only. */
-    val hops: Int
+    val hops: Int,
+
+    /**
+     * The ORIGINAL sender's coordinates, attached only to SOS messages.
+     *
+     * Null for ordinary text — normal messages never carry location. Because
+     * [relayed] is a data-class copy, these travel untouched through every hop,
+     * so a relay can never substitute its own position for the sender's.
+     */
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+
+    /** When the sender captured that fix (epoch millis). */
+    val locationTime: Long? = null
 ) {
+
+    /** True when this message carries usable coordinates. */
+    val hasLocation: Boolean get() = latitude != null && longitude != null
 
     fun toJson(): String = JSONObject().apply {
         put(KEY_ID, messageId)
@@ -43,6 +59,9 @@ data class MeshMessage(
         put(KEY_PAYLOAD, payload)
         put(KEY_TTL, ttl)
         put(KEY_HOPS, hops)
+        if (latitude != null) put(KEY_LAT, latitude)
+        if (longitude != null) put(KEY_LON, longitude)
+        if (locationTime != null) put(KEY_LOC_TIME, locationTime)
     }.toString()
 
     fun toBytes(): ByteArray = toJson().toByteArray(Charsets.UTF_8)
@@ -67,6 +86,9 @@ data class MeshMessage(
         private const val KEY_PAYLOAD = "body"
         private const val KEY_TTL = "ttl"
         private const val KEY_HOPS = "hops"
+        private const val KEY_LAT = "lat"
+        private const val KEY_LON = "lon"
+        private const val KEY_LOC_TIME = "locTs"
 
         /** Builds a brand new message originating from this phone. */
         fun create(
@@ -74,7 +96,10 @@ data class MeshMessage(
             senderName: String,
             payload: String,
             destinationId: String = BROADCAST,
-            ttl: Int = DEFAULT_TTL
+            ttl: Int = DEFAULT_TTL,
+            latitude: Double? = null,
+            longitude: Double? = null,
+            locationTime: Long? = null
         ): MeshMessage = MeshMessage(
             messageId = UUID.randomUUID().toString(),
             senderId = senderId,
@@ -82,7 +107,10 @@ data class MeshMessage(
             destinationId = destinationId,
             payload = payload,
             ttl = ttl,
-            hops = 0
+            hops = 0,
+            latitude = latitude,
+            longitude = longitude,
+            locationTime = locationTime
         )
 
         /**
@@ -98,7 +126,10 @@ data class MeshMessage(
                 destinationId = json.optString(KEY_DESTINATION, BROADCAST),
                 payload = json.getString(KEY_PAYLOAD),
                 ttl = json.optInt(KEY_TTL, 1),
-                hops = json.optInt(KEY_HOPS, 0)
+                hops = json.optInt(KEY_HOPS, 0),
+                latitude = if (json.has(KEY_LAT)) json.getDouble(KEY_LAT) else null,
+                longitude = if (json.has(KEY_LON)) json.getDouble(KEY_LON) else null,
+                locationTime = if (json.has(KEY_LOC_TIME)) json.getLong(KEY_LOC_TIME) else null
             )
         } catch (e: Exception) {
             null

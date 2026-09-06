@@ -52,4 +52,7 @@ dependencies {
 
     // Google Nearby Connections — the offline device-to-device transport.
     implementation(libs.play.services.nearby)
+
+    // One-shot GPS fix for SOS messages. Same Play Services family as Nearby.
+    implementation(libs.play.services.location)
 }

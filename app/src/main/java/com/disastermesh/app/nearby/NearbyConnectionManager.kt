@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.disastermesh.app.notify.MeshNotifier
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.AdvertisingOptions
@@ -36,7 +37,10 @@ import kotlin.random.Random
  *
  * Nearby Connections gives us ONE thing: a byte pipe between two phones that are
  * directly connected. It does not route, forward or deduplicate anything, so
- * A -> B -> C works only because this class explicitly re-sends what it receives.
+ * Multi-hop works only because this class explicitly re-sends what it receives.
+ * (Test example, not a product concept: three nodes in a line X -> Y -> Z deliver
+ * X's message to Z even though X and Z never connect. No node is special — every
+ * node runs this identical code and can be the origin, a relay, or a recipient.)
  */
 class NearbyConnectionManager(context: Context) {
 
@@ -51,6 +55,9 @@ class NearbyConnectionManager(context: Context) {
 
     /** Message ids already handled — the thing that stops the flood looping. */
     private val seen = SeenMessages()
+
+    /** Posts local Android notifications. Cannot affect routing in any way. */
+    private val notifier = MeshNotifier(appContext)
 
     /** Used for connection retries. Nearby's callbacks are all on the main thread. */
     private val handler = Handler(Looper.getMainLooper())
@@ -109,7 +116,7 @@ class NearbyConnectionManager(context: Context) {
      * connected peer. Those peers relay it onwards, which is how it reaches nodes
      * this one cannot see.
      */
-    fun sendText(text: String) {
+    fun sendText(text: String, latitude: Double? = null, longitude: Double? = null, locationTime: Long? = null) {
         val targets = connectedEndpointIds()
         if (targets.isEmpty()) {
             setStatus("Nothing to send to — no connected nodes yet")
@@ -119,7 +126,10 @@ class NearbyConnectionManager(context: Context) {
         val message = MeshMessage.create(
             senderId = nodeId,
             senderName = "$nodeId (${_state.value.deviceModel})",
-            payload = text
+            payload = text,
+            latitude = latitude,
+            longitude = longitude,
+            locationTime = locationTime
         )
 
         // Remember our own message id immediately. If the mesh loops it back to
@@ -135,7 +145,10 @@ class NearbyConnectionManager(context: Context) {
                     payload = message.payload,
                     fromNode = message.senderId,
                     hops = message.hops,
-                    ttl = message.ttl
+                    ttl = message.ttl,
+                    messageId = message.messageId,
+                    latitude = message.latitude,
+                    longitude = message.longitude
                 )
             }
             .addOnFailureListener { error ->
@@ -447,8 +460,18 @@ class NearbyConnectionManager(context: Context) {
                 payload = message.payload,
                 fromNode = message.senderId,
                 hops = message.hops,
-                ttl = message.ttl
+                ttl = message.ttl,
+                messageId = message.messageId,
+                latitude = message.latitude,
+                longitude = message.longitude
             )
+
+            // Notify. This line is reached ONLY for a genuinely new message meant
+            // for this phone: step 1 above already discarded our own messages and
+            // step 2 already discarded anything SeenMessages had handled before.
+            // So duplicate suppression is inherited rather than reimplemented, and
+            // relayed copies arriving later never reach here.
+            notifier.notifyIncoming(message)
         }
 
         // A message addressed to us personally has arrived. Nothing to forward.
@@ -513,10 +536,15 @@ class NearbyConnectionManager(context: Context) {
         payload: String? = null,
         fromNode: String? = null,
         hops: Int? = null,
-        ttl: Int? = null
+        ttl: Int? = null,
+        messageId: String? = null,
+        latitude: Double? = null,
+        longitude: Double? = null
     ) {
         _state.update { current ->
-            val entry = MeshLogEntry(text, kind, payload, fromNode, hops, ttl)
+            val entry = MeshLogEntry(
+                text, kind, payload, fromNode, hops, ttl, messageId, latitude, longitude
+            )
             val updated = current.messages + entry
             current.copy(messages = updated.takeLast(MAX_LOG_ENTRIES))
         }

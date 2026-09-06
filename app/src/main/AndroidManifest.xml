@@ -33,6 +33,16 @@
     <!-- Android 13+ (API 33+) replacement for location when using nearby Wi-Fi. -->
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
+    <!-- Local notifications about received mesh messages. Runtime prompt on Android 13+
+         only; on older versions it is granted at install. Nothing to do with networking. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Keeps the mesh node alive while the UI is not on screen. "connectedDevice"
+         is the correct type for Nearby Connections, which talks to nearby peers
+         over Bluetooth and Wi-Fi. The typed permission is required from API 34. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -44,6 +54,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:label="@string/app_name"
             android:theme="@style/Theme.DisasterMesh">
             <intent-filter>
@@ -51,6 +62,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".service.MeshForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
     </application>
 
 </manifest>
