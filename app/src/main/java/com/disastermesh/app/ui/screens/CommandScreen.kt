@@ -51,6 +51,8 @@ import com.disastermesh.app.command.triageSorted
 import com.disastermesh.app.nearby.MeshState
 import com.disastermesh.app.ui.components.LiveDot
 import com.disastermesh.app.ui.components.MeshPanel
+import com.disastermesh.app.ui.components.MeshStatus
+import com.disastermesh.app.ui.components.MeshStatusKind
 import com.disastermesh.app.ui.components.ReportCard
 import com.disastermesh.app.ui.components.SectionLabel
 import com.disastermesh.app.ui.components.categoryColor
@@ -113,7 +115,10 @@ fun CommandScreen(
 
         SituationSummary(state, counts)
 
-        UplinkCard(uplinkStatus)
+        // The hybrid-uplink panel that used to sit here is a verbatim copy of the
+        // one on Home. Command answers "what emergencies are we dealing with" —
+        // transport belongs to Home, and its event log is at the foot of this
+        // screen where an operator looks for it deliberately.
 
         SearchField(query = query, onQueryChange = { query = it })
 
@@ -140,9 +145,9 @@ fun CommandScreen(
                 }
             }
         }
-    }
 
-    UplinkTimeline(uplinkEvents)
+        UplinkTimeline(uplinkEvents)
+    }
 
     detail?.let { report ->
         ReportDetailDialog(
@@ -160,41 +165,45 @@ private inline fun key(id: String, content: @Composable () -> Unit) {
     androidx.compose.runtime.key(id) { content() }
 }
 
-/** Real mesh state plus real report counts. Nothing derived that is not measured. */
+/**
+ * Real mesh state plus real report counts. Nothing derived that is not measured.
+ *
+ * Five stacked rows and a paragraph of caveat became one scannable strip: the
+ * feed is what this screen is for, and the summary should not push it below the
+ * fold before an operator has seen a single report.
+ */
 @Composable
 private fun SituationSummary(state: MeshState, counts: ReportCounts) {
-    MeshPanel(
-        border = if (counts.critical > 0) {
-            Mesh.Signal.Emergency.copy(alpha = 0.45f)
-        } else {
-            null
-        }
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.md)) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
+            horizontalArrangement = Arrangement.spacedBy(Mesh.Space.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            LiveDot(active = state.meshActive, color = Mesh.Signal.Ok, size = 8)
-            Text(
-                if (state.meshActive) "Mesh active" else "Mesh inactive",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = if (state.meshActive) Mesh.Text.Primary else Mesh.Text.Tertiary
+            MeshStatus(
+                if (state.meshActive && state.isConnected) MeshStatusKind.ACTIVE
+                else if (state.meshActive) MeshStatusKind.STARTING
+                else MeshStatusKind.OFFLINE
             )
             Text(
-                "·  ${state.connectedCount} connected nodes",
-                style = MaterialTheme.typography.bodyMedium,
+                "· ${state.connectedCount} connected",
+                style = MaterialTheme.typography.bodySmall,
                 color = Mesh.Text.Secondary
             )
         }
 
-        ReportCategory.entries.forEach { category ->
-            CountRow(category, countFor(category, counts))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm)
+        ) {
+            ReportCategory.entries.forEach { category ->
+                CountTile(category, countFor(category, counts))
+            }
         }
 
         Text(
-            "Counts reflect reports this device has received. Nodes out of range " +
-                "may hold reports this one has not seen.",
+            "Counts reflect reports this device has received.",
             style = MaterialTheme.typography.labelSmall,
             color = Mesh.Text.Tertiary
         )
@@ -209,38 +218,42 @@ private fun countFor(category: ReportCategory, counts: ReportCounts): Int = when
     ReportCategory.SAFE -> counts.safe
 }
 
+/**
+ * One category, one tile. Colour appears only when the count is non-zero, so a
+ * quiet situation reads as genuinely quiet rather than as five lit indicators.
+ */
 @Composable
-private fun CountRow(category: ReportCategory, count: Int) {
+private fun CountTile(category: ReportCategory, count: Int) {
     val color = categoryColor(category)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    val live = count > 0
+    Column(
+        modifier = Modifier
+            .background(Mesh.Surface.Card, RoundedCornerShape(Mesh.Radius.md))
+            .padding(horizontal = Mesh.Space.lg, vertical = Mesh.Space.md),
+        verticalArrangement = Arrangement.spacedBy(Mesh.Space.xs)
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(Mesh.Space.md),
+            horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(width = 3.dp, height = 16.dp)
+                    .size(width = 3.dp, height = 12.dp)
                     .background(
-                        if (count > 0) color else Mesh.Signal.Idle,
+                        if (live) color else Mesh.Signal.Idle,
                         RoundedCornerShape(2.dp)
                     )
             )
             Text(
                 category.label.uppercase(),
-                style = MaterialTheme.typography.labelLarge,
-                color = if (count > 0) Mesh.Text.Primary else Mesh.Text.Tertiary
+                style = MaterialTheme.typography.labelSmall,
+                color = if (live) Mesh.Text.Secondary else Mesh.Text.Tertiary
             )
         }
         Text(
             count.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            fontFamily = Mesh.Mono,
-            fontWeight = FontWeight.Bold,
-            color = if (count > 0) color else Mesh.Text.Tertiary
+            style = MaterialTheme.typography.headlineMedium,
+            color = if (live) color else Mesh.Text.Tertiary
         )
     }
 }

@@ -319,6 +319,14 @@ fun DisasterMeshApp(
  * Bottom navigation. Four destinations, each a full 48dp target with an
  * animated indicator above the active item.
  */
+/**
+ * Fixed bottom navigation.
+ *
+ * Each destination takes an equal share of the width rather than being spaced
+ * evenly by content, so "Messages" can never crowd its neighbours on a narrow
+ * device. Selection is carried by three quiet signals at once — a rule, a tint
+ * and a weight change — instead of one loud one.
+ */
 @Composable
 private fun BottomBar(current: Tab, onSelect: (Tab) -> Unit) {
     Column(modifier = Modifier.background(Mesh.Surface.Card)) {
@@ -327,14 +335,15 @@ private fun BottomBar(current: Tab, onSelect: (Tab) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(vertical = Mesh.Space.sm),
-            horizontalArrangement = Arrangement.SpaceEvenly
+                .padding(top = Mesh.Space.sm, bottom = Mesh.Space.md),
+            horizontalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             BOTTOM_TABS.forEach { entry ->
                 NavItem(
                     entry = entry,
                     selected = entry == current,
-                    onClick = { onSelect(entry) }
+                    onClick = { onSelect(entry) },
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -342,23 +351,28 @@ private fun BottomBar(current: Tab, onSelect: (Tab) -> Unit) {
 }
 
 @Composable
-private fun NavItem(entry: Tab, selected: Boolean, onClick: () -> Unit) {
+private fun NavItem(
+    entry: Tab,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val tint by animateColorAsState(
         targetValue = if (selected) Mesh.Signal.Live else Mesh.Text.Tertiary,
         animationSpec = tween(200),
         label = "navTint"
     )
     val indicatorWidth by animateDpAsState(
-        targetValue = if (selected) 20.dp else 0.dp,
+        targetValue = if (selected) 18.dp else 0.dp,
         animationSpec = tween(220),
         label = "navIndicator"
     )
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .heightIn(min = Mesh.TouchTarget)
             .selectable(selected = selected, role = Role.Tab, onClick = onClick)
-            .padding(horizontal = Mesh.Space.sm, vertical = Mesh.Space.sm),
+            .padding(vertical = Mesh.Space.xs),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Mesh.Space.xs)
     ) {
@@ -372,13 +386,14 @@ private fun NavItem(entry: Tab, selected: Boolean, onClick: () -> Unit) {
             imageVector = entry.icon,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(21.dp)
+            modifier = Modifier.size(22.dp)
         )
         Text(
             entry.label,
             style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = tint
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = tint,
+            maxLines = 1
         )
     }
 }

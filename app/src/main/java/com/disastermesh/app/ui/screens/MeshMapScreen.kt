@@ -60,7 +60,7 @@ fun MeshMapScreen(state: MeshState, syncStatus: SyncStatus) {
                 color = Mesh.Text.Primary
             )
             Text(
-                "Your node and the nodes it is directly linked to",
+                "How this node is connected",
                 style = MaterialTheme.typography.bodySmall,
                 color = Mesh.Text.Tertiary
             )
@@ -78,9 +78,10 @@ fun MeshMapScreen(state: MeshState, syncStatus: SyncStatus) {
             ) {
                 TopologyGraph(state)
             }
+            // One line, not three. The visualisation is the explanation; prose
+            // that restates it just competes with it for attention.
             Text(
-                "Messages travel further than this picture: each connected node " +
-                    "forwards what it receives to its own neighbours.",
+                "Each connected node forwards what it receives to its own neighbours.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Mesh.Text.Tertiary
             )

@@ -81,81 +81,67 @@ fun SosButton(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
 
-    val transition = rememberInfiniteTransition(label = "sos")
-    val breath by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2200), RepeatMode.Reverse),
-        label = "breath"
-    )
+    // Press feedback only. The old control breathed continuously, which reads as
+    // urgency the app is not entitled to manufacture — nothing is happening yet.
     val press by animateFloatAsState(
-        targetValue = if (pressed) 0.96f else 1f,
-        animationSpec = tween(120),
+        targetValue = if (pressed) 0.985f else 1f,
+        animationSpec = tween(110),
         label = "sosPress"
     )
 
+    val shape = RoundedCornerShape(Mesh.Radius.md)
+
     Column(
         modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Mesh.Space.md)
+        verticalArrangement = Arrangement.spacedBy(Mesh.Space.sm)
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            // Outer breath. Only animates while the action is available, so a
-            // disabled control is visually still.
-            if (enabled) {
-                Box(
-                    modifier = Modifier
-                        .size(206.dp)
-                        .scale(0.92f + breath * 0.08f)
-                        .alpha(0.10f + breath * 0.10f)
-                        .background(Mesh.Signal.Emergency, CircleShape)
+        // A restrained critical-red action AREA, not a novelty circle. It has to
+        // read as serious rather than dramatic, and it holds the same footprint
+        // whether or not it is usable so it never moves under a reaching thumb.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .scale(press)
+                .background(
+                    if (enabled) Mesh.Signal.EmergencyGround else Mesh.Surface.Sunken,
+                    shape
                 )
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(168.dp)
-                    .scale(press)
-                    .background(
-                        if (enabled) Mesh.Signal.EmergencyDeep.copy(alpha = 0.22f)
-                        else Mesh.Surface.Card,
-                        CircleShape
-                    )
-                    .border(
-                        width = if (enabled) 2.dp else 1.dp,
-                        color = if (enabled) Mesh.Signal.Emergency else Mesh.Line.Subtle,
-                        shape = CircleShape
-                    )
-                    .clickable(
-                        enabled = enabled,
-                        interactionSource = interaction,
-                        indication = null,
-                        role = Role.Button
-                    ) {
-                        showConfirm = true
-                        onOpened()
-                    }
-                    .semantics {
-                        contentDescription =
-                            "Send emergency SOS, category $categoryLabel, to $connectedCount connected nodes"
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "SOS",
-                        fontSize = 44.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 4.sp,
-                        color = if (enabled) Mesh.Signal.Emergency else Mesh.Text.Tertiary
-                    )
-                    Text(
-                        "Broadcast emergency",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (enabled) Mesh.Text.Secondary else Mesh.Text.Tertiary
-                    )
+                .border(
+                    width = 1.5.dp,
+                    color = if (enabled) Mesh.Signal.Emergency else Mesh.Line.Subtle,
+                    shape = shape
+                )
+                .clickable(
+                    enabled = enabled,
+                    interactionSource = interaction,
+                    indication = null,
+                    role = Role.Button
+                ) {
+                    showConfirm = true
+                    onOpened()
                 }
-            }
+                .padding(horizontal = Mesh.Space.xl, vertical = Mesh.Space.xl)
+                .semantics {
+                    contentDescription =
+                        "Send emergency SOS, category $categoryLabel, to $connectedCount connected nodes"
+                },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Mesh.Space.xs)
+        ) {
+            Text(
+                "SOS",
+                fontSize = 30.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 3.sp,
+                color = if (enabled) Mesh.Signal.Emergency else Mesh.Text.Tertiary
+            )
+            Text(
+                if (enabled) "Broadcast emergency to $connectedCount " +
+                    (if (connectedCount == 1) "node" else "nodes")
+                else "Broadcast emergency",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (enabled) Mesh.Text.Secondary else Mesh.Text.Tertiary
+            )
         }
 
         if (!enabled) {

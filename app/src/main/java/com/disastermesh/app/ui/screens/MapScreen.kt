@@ -67,6 +67,7 @@ import com.disastermesh.app.ui.components.SectionLabel
 import com.disastermesh.app.ui.components.categoryColor
 import com.disastermesh.app.ui.components.categoryIcon
 import com.disastermesh.app.ui.components.relativeTime
+import com.disastermesh.app.ui.components.colorForCategory
 import com.disastermesh.app.ui.theme.Mesh
 import kotlin.math.hypot
 
@@ -182,7 +183,7 @@ fun MapScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(420.dp)
+                .height(520.dp)
                 .background(Mesh.Surface.Sunken, RoundedCornerShape(Mesh.Radius.lg))
                 .border(1.dp, Mesh.Line.Subtle, RoundedCornerShape(Mesh.Radius.lg))
         ) {
@@ -478,21 +479,18 @@ private fun StatusBar(
         horizontalArrangement = Arrangement.spacedBy(Mesh.Space.xl)
     ) {
         StatusStat("Nodes", nodes.size.toString(), Mesh.Signal.Live)
-        StatusStat(
-            "Critical",
-            (counts[ReportCategory.CRITICAL] ?: 0).toString(),
-            Mesh.Signal.Emergency
-        )
-        StatusStat(
-            "Medical",
-            (counts[ReportCategory.MEDICAL] ?: 0).toString(),
-            Mesh.Signal.Warning
-        )
-        StatusStat(
-            "Supply",
-            (counts[ReportCategory.SUPPLY] ?: 0).toString(),
-            Mesh.Signal.Action
-        )
+        ReportCategory.entries
+            .filter { it != ReportCategory.SAFE }
+            .forEach { category ->
+                val n = counts[category] ?: 0
+                StatusStat(
+                    category.label,
+                    n.toString(),
+                    // One mapping, shared with Command and Home. Medical was
+                    // wearing Warning's amber and Supply the interaction blue.
+                    if (n > 0) colorForCategory(category) else Mesh.Text.Tertiary
+                )
+            }
         StatusStat("Connected", state.connectedCount.toString(), Mesh.Text.Secondary)
     }
 }

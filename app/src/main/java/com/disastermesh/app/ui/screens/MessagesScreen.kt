@@ -40,6 +40,9 @@ import com.disastermesh.app.nearby.MeshState
 import com.disastermesh.app.ui.components.LiveDot
 import com.disastermesh.app.ui.components.SectionLabel
 import com.disastermesh.app.ui.components.formatCoordinates
+import com.disastermesh.app.ui.components.MeshEmpty
+import com.disastermesh.app.ui.components.MeshStatus
+import com.disastermesh.app.ui.components.MeshStatusKind
 import com.disastermesh.app.ui.theme.Mesh
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -108,57 +111,41 @@ private fun MeshStrip(state: MeshState) {
         horizontalArrangement = Arrangement.spacedBy(Mesh.Space.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        LiveDot(active = state.meshActive, color = Mesh.Signal.Ok, size = 8)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                if (state.meshActive) "Mesh online" else "Mesh offline",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = if (state.meshActive) Mesh.Text.Primary else Mesh.Text.Tertiary
-            )
-            Text(
-                if (state.connectedCount == 1) "1 node connected · internet not required"
-                else "${state.connectedCount} nodes connected · internet not required",
-                style = MaterialTheme.typography.bodySmall,
-                color = Mesh.Text.Tertiary
-            )
-        }
+        // Same status vocabulary as every other screen. The "internet not
+        // required" line lived here, on Home and in the widget; saying it three
+        // times made it read as reassurance rather than as a fact.
+        MeshStatus(
+            if (state.meshActive && state.isConnected) MeshStatusKind.ACTIVE
+            else if (state.meshActive) MeshStatusKind.STARTING
+            else MeshStatusKind.OFFLINE,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            if (state.connectedCount == 1) "1 node" else "${state.connectedCount} nodes",
+            style = MaterialTheme.typography.bodySmall,
+            color = Mesh.Text.Secondary
+        )
     }
 }
 
+/**
+ * Compact by design.
+ *
+ * This was a full-width card roughly a third of the viewport tall carrying one
+ * sentence. An empty inbox is information, not furniture — it gets the room one
+ * sentence deserves, and the composer stays the thing in reach.
+ */
 @Composable
 private fun EmptyMessages(meshActive: Boolean) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Mesh.Surface.Card, RoundedCornerShape(Mesh.Radius.lg))
-            .padding(Mesh.Space.xxl),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Mesh.Space.md)
-    ) {
-        Icon(
-            Icons.Filled.Email,
-            contentDescription = null,
-            tint = Mesh.Text.Tertiary,
-            modifier = Modifier.size(28.dp)
-        )
-        Text(
-            "No messages yet",
-            style = MaterialTheme.typography.titleMedium,
-            color = Mesh.Text.Primary
-        )
-        Text(
-            if (meshActive) {
-                "Your node is live. Anything sent by a nearby node appears here, " +
-                    "including messages relayed from further away."
-            } else {
-                "Start the mesh on the Home tab, then messages from nearby nodes " +
-                    "will appear here."
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = Mesh.Text.Tertiary
-        )
-    }
+    MeshEmpty(
+        icon = Icons.Filled.Email,
+        title = "No messages yet",
+        body = if (meshActive) {
+            "Your node is live. Anything a nearby node sends appears here, including relayed messages."
+        } else {
+            "Start the mesh on the Home tab to begin receiving."
+        }
+    )
 }
 
 @Composable
