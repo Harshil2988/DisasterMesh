@@ -33,6 +33,24 @@
     <!-- Android 13+ (API 33+) replacement for location when using nearby Wi-Fi. -->
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
+    <!-- Local notifications about received mesh messages. Runtime prompt on Android 13+
+         only; on older versions it is granted at install. Nothing to do with networking. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Keeps the mesh node alive while the UI is not on screen. "connectedDevice"
+         is the correct type for Nearby Connections, which talks to nearby peers
+         over Bluetooth and Wi-Fi. The typed permission is required from API 34. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- Voice messages. Requested at the moment the user first taps record,
+         never at startup, and the rest of the app works without it. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Used ONLY by the optional gateway uplink. The mesh itself never touches
+         the internet, and with no endpoint configured nothing is ever sent. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -44,6 +62,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:label="@string/app_name"
             android:theme="@style/Theme.DisasterMesh">
             <intent-filter>
@@ -51,6 +70,32 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Declares this app as suitable for satellite-constrained data, which is
+             what PROPERTY_SATELLITE_DATA_OPTIMIZED is for: small, high-value
+             emergency payloads rather than bulk traffic. Harmlessly ignored on
+             devices and Android versions without satellite support. -->
+        <property
+            android:name="android.telephony.satellite.PROPERTY_SATELLITE_DATA_OPTIMIZED"
+            android:value="true" />
+
+        <!-- Home-screen emergency panel. Not exported to other apps; the system
+             delivers widget broadcasts to it regardless. -->
+        <receiver
+            android:name=".widget.DisasterMeshWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/disaster_mesh_widget_info" />
+        </receiver>
+
+        <service
+            android:name=".service.MeshForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
     </application>
 
 </manifest>

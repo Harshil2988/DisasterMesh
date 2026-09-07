@@ -1,15 +1,17 @@
 package com.disastermesh.app.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -20,21 +22,23 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.disastermesh.app.ui.MessageCategory
-import com.disastermesh.app.ui.theme.MeshColors
+import com.disastermesh.app.ui.theme.Mesh
 
 /**
- * Horizontal emergency category selector.
+ * Emergency category selector.
  *
- * A horizontal strip rather than the reference's left rail: on a phone a side
- * rail steals width the status readouts need. It scrolls, so it never crowds
- * a narrow screen.
+ * A horizontal strip rather than a side rail: on a narrow screen a rail steals
+ * width the status readouts need. Chips are 48dp tall with 8dp gaps to meet
+ * Android touch-target guidance, and scroll rather than wrap.
  */
 @Composable
 fun CategorySelector(
@@ -43,8 +47,10 @@ fun CategorySelector(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = modifier
+            .horizontalScroll(rememberScrollState())
+            .padding(vertical = Mesh.Space.xs),
+        horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm)
     ) {
         MessageCategory.entries.forEach { category ->
             CategoryChip(
@@ -63,33 +69,41 @@ private fun CategoryChip(
     onClick: () -> Unit
 ) {
     val accent = accentFor(category)
-    Column(
+    val shape = RoundedCornerShape(Mesh.Radius.md)
+
+    val container by animateColorAsState(
+        targetValue = if (isSelected) accent.copy(alpha = 0.14f) else Mesh.Surface.Card,
+        animationSpec = tween(220),
+        label = "chipBg"
+    )
+    val outline by animateColorAsState(
+        targetValue = if (isSelected) accent else Mesh.Line.Subtle,
+        animationSpec = tween(220),
+        label = "chipLine"
+    )
+
+    Row(
         modifier = Modifier
-            .background(
-                if (isSelected) accent.copy(alpha = 0.16f) else MeshColors.Surface,
-                RoundedCornerShape(14.dp)
-            )
-            .border(
-                1.dp,
-                if (isSelected) accent else MeshColors.Border,
-                RoundedCornerShape(14.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .heightIn(min = Mesh.TouchTarget)
+            .background(container, shape)
+            .border(1.dp, outline, shape)
+            .selectable(selected = isSelected, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = Mesh.Space.lg),
+        horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = iconFor(category),
             contentDescription = null,
-            tint = if (isSelected) accent else MeshColors.TextDim,
-            modifier = Modifier.size(22.dp)
+            tint = if (isSelected) accent else Mesh.Text.Tertiary,
+            modifier = Modifier.size(17.dp)
         )
         Text(
-            category.label,
-            style = MaterialTheme.typography.bodySmall,
+            // Sentence case rather than shouting: the SOS button is the loud element.
+            category.label.lowercase().replaceFirstChar { it.uppercase() },
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-            color = if (isSelected) MeshColors.TextPrimary else MeshColors.TextDim
+            color = if (isSelected) Mesh.Text.Primary else Mesh.Text.Secondary
         )
     }
 }
@@ -101,9 +115,10 @@ private fun iconFor(category: MessageCategory): ImageVector = when (category) {
     MessageCategory.SUPPLY -> Icons.Filled.ShoppingCart
 }
 
+/** Semantic colour per category, drawn from the shared palette. */
 fun accentFor(category: MessageCategory): Color = when (category) {
-    MessageCategory.SAFE -> MeshColors.Green
-    MessageCategory.MEDICAL -> MeshColors.Red
-    MessageCategory.WARNING -> MeshColors.Amber
-    MessageCategory.SUPPLY -> MeshColors.Cyan
+    MessageCategory.SAFE -> Mesh.Signal.Ok
+    MessageCategory.MEDICAL -> Mesh.Signal.Emergency
+    MessageCategory.WARNING -> Mesh.Signal.Warning
+    MessageCategory.SUPPLY -> Mesh.Signal.Live
 }

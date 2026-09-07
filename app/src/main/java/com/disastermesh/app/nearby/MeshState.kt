@@ -51,8 +51,22 @@ data class MeshLogEntry(
     /** Relays the message had already made when it reached us. */
     val hops: Int? = null,
     /** Hops the message had left at this point. */
-    val ttl: Int? = null
+    val ttl: Int? = null,
+    /** The envelope's unique id, used to highlight a notification's message. */
+    val messageId: String? = null,
+    /** The ORIGINAL sender's coordinates, when the message carried them. */
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    /**
+     * When this entry was created on THIS phone. A genuine local receipt time —
+     * the wire envelope carries no clock, so this is not the sender's time and is
+     * never presented as one. Defaulted, so no existing call site changes.
+     */
+    val timestamp: Long = System.currentTimeMillis()
 ) {
+
+    /** True when this entry has coordinates worth showing. */
+    val hasLocation: Boolean get() = latitude != null && longitude != null
     enum class Kind { SENT, RECEIVED, RELAYED, DROPPED }
 
     /** True when the payload was sent as an emergency broadcast. */

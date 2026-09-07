@@ -1,138 +1,372 @@
 package com.disastermesh.app.ui.screens
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.disastermesh.app.audio.AudioMessage
+import com.disastermesh.app.audio.AudioState
+import com.disastermesh.app.audio.AudioTransfer
+import com.disastermesh.app.audio.PlaybackState
+import com.disastermesh.app.ui.components.AudioBubbleContent
 import com.disastermesh.app.nearby.MeshLogEntry
 import com.disastermesh.app.nearby.MeshState
-import com.disastermesh.app.ui.components.SectionHeader
-import com.disastermesh.app.ui.theme.MeshColors
+import com.disastermesh.app.ui.components.LiveDot
+import com.disastermesh.app.ui.components.SectionLabel
+import com.disastermesh.app.ui.components.formatCoordinates
+import com.disastermesh.app.ui.theme.Mesh
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
- * Message log as cards.
+ * Offline messaging.
  *
- * Every field shown here exists on the real MeshMessage envelope (payload,
- * sender id, hops, TTL). Entries that carry no message — a relay failure, say —
- * fall back to their plain summary line rather than inventing values.
+ * Conversation entries are bubbles; relay and drop events stay as quiet system
+ * lines, because watching a message get relayed is the clearest evidence that
+ * the mesh is doing its job. Every field shown is real.
  */
 @Composable
-fun MessagesScreen(state: MeshState) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+fun MessagesScreen(
+    state: MeshState,
+    highlightMessageId: String? = null,
+    audioStateOf: (String) -> AudioState = { AudioState.PENDING },
+    audioTransfers: Map<String, AudioTransfer> = emptyMap(),
+    playback: PlaybackState = PlaybackState(),
+    onTogglePlay: (String) -> Unit = {},
+    onRetryAudio: (String) -> Unit = {}
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.lg)) {
+
         Text(
-            "MESSAGES",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MeshColors.TextPrimary
+            "Messages",
+            style = MaterialTheme.typography.displaySmall,
+            color = Mesh.Text.Primary
         )
-        SectionHeader("${state.messages.size} events")
+
+        MeshStrip(state)
 
         if (state.messages.isEmpty()) {
-            Text(
-                "Nothing yet. Start the mesh, wait for a node to connect, then send " +
-                    "HELLO or an SOS.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MeshColors.TextDim
-            )
+            EmptyMessages(state.meshActive)
             return@Column
         }
 
-        // Newest first — the thing you care about in an emergency is the latest.
-        state.messages.asReversed().forEach { entry ->
-            MessageCard(entry)
+        // Chronological, so the newest sits nearest the composer.
+        state.messages.forEach { entry ->
+            val highlighted = highlightMessageId != null && entry.messageId == highlightMessageId
+            when (entry.kind) {
+                MeshLogEntry.Kind.SENT -> Bubble(
+                    entry, fromMe = true, highlighted = highlighted,
+                    audioStateOf = audioStateOf, audioTransfers = audioTransfers,
+                    playback = playback, onTogglePlay = onTogglePlay, onRetryAudio = onRetryAudio
+                )
+                MeshLogEntry.Kind.RECEIVED -> Bubble(
+                    entry, fromMe = false, highlighted = highlighted,
+                    audioStateOf = audioStateOf, audioTransfers = audioTransfers,
+                    playback = playback, onTogglePlay = onTogglePlay, onRetryAudio = onRetryAudio
+                )
+                else -> SystemLine(entry)
+            }
+        }
+    }
+}
+
+/** Compact live-status strip so the offline nature is always visible. */
+@Composable
+private fun MeshStrip(state: MeshState) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Mesh.Surface.Card, RoundedCornerShape(Mesh.Radius.md))
+            .padding(horizontal = Mesh.Space.lg, vertical = Mesh.Space.md),
+        horizontalArrangement = Arrangement.spacedBy(Mesh.Space.md),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LiveDot(active = state.meshActive, color = Mesh.Signal.Ok, size = 8)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                if (state.meshActive) "Mesh online" else "Mesh offline",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (state.meshActive) Mesh.Text.Primary else Mesh.Text.Tertiary
+            )
+            Text(
+                if (state.connectedCount == 1) "1 node connected · internet not required"
+                else "${state.connectedCount} nodes connected · internet not required",
+                style = MaterialTheme.typography.bodySmall,
+                color = Mesh.Text.Tertiary
+            )
         }
     }
 }
 
 @Composable
-private fun MessageCard(entry: MeshLogEntry) {
-    val accent = accentFor(entry)
+private fun EmptyMessages(meshActive: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MeshColors.Surface, RoundedCornerShape(14.dp))
-            .border(1.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .background(Mesh.Surface.Card, RoundedCornerShape(Mesh.Radius.lg))
+            .padding(Mesh.Space.xxl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Mesh.Space.md)
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                labelFor(entry),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = accent
-            )
-        }
-
-        // The payload, when this entry actually carried one.
-        if (entry.payload != null) {
-            Text(
-                "\"${entry.displayPayload}\"",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MeshColors.TextPrimary
-            )
-        } else {
-            Text(
-                entry.text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MeshColors.TextSecondary
-            )
-        }
-
-        // Only render metadata fields that genuinely exist on this entry.
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            entry.fromNode?.let { Meta("From", it) }
-            entry.hops?.let { Meta("Hops", it.toString()) }
-            entry.ttl?.let { Meta("TTL", it.toString()) }
-        }
+        Icon(
+            Icons.Filled.Email,
+            contentDescription = null,
+            tint = Mesh.Text.Tertiary,
+            modifier = Modifier.size(28.dp)
+        )
+        Text(
+            "No messages yet",
+            style = MaterialTheme.typography.titleMedium,
+            color = Mesh.Text.Primary
+        )
+        Text(
+            if (meshActive) {
+                "Your node is live. Anything sent by a nearby node appears here, " +
+                    "including messages relayed from further away."
+            } else {
+                "Start the mesh on the Home tab, then messages from nearby nodes " +
+                    "will appear here."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = Mesh.Text.Tertiary
+        )
     }
 }
 
 @Composable
-private fun Meta(label: String, value: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            "$label:",
-            style = MaterialTheme.typography.bodySmall,
-            color = MeshColors.TextDim
-        )
-        Text(
-            value,
-            style = MaterialTheme.typography.bodySmall,
-            fontFamily = FontFamily.Monospace,
-            color = MeshColors.TextSecondary
-        )
+private fun Bubble(
+    entry: MeshLogEntry,
+    fromMe: Boolean,
+    highlighted: Boolean,
+    audioStateOf: (String) -> AudioState,
+    audioTransfers: Map<String, AudioTransfer>,
+    playback: PlaybackState,
+    onTogglePlay: (String) -> Unit,
+    onRetryAudio: (String) -> Unit
+) {
+    val audio = AudioMessage.decode(entry.payload)
+    val sos = entry.isSos
+    val accent = when {
+        sos -> Mesh.Signal.Emergency
+        fromMe -> Mesh.Signal.Live
+        else -> Mesh.Line.Subtle
+    }
+    val container = when {
+        sos -> Mesh.Signal.EmergencyDeep.copy(alpha = 0.16f)
+        fromMe -> Mesh.Signal.LiveDeep.copy(alpha = 0.14f)
+        else -> Mesh.Surface.Card
+    }
+    val shape = RoundedCornerShape(Mesh.Radius.lg)
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (fromMe) Arrangement.End else Arrangement.Start
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 310.dp)
+                .background(container, shape)
+                .then(
+                    if (sos || highlighted) Modifier.border(
+                        if (highlighted) 2.dp else 1.dp, accent, shape
+                    ) else Modifier
+                )
+                .padding(Mesh.Space.lg),
+            verticalArrangement = Arrangement.spacedBy(Mesh.Space.sm)
+        ) {
+            if (sos) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = Mesh.Signal.Emergency,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        "Emergency SOS",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Mesh.Signal.Emergency
+                    )
+                }
+            }
+
+            Text(
+                if (fromMe) "You" else (entry.fromNode ?: "Unknown node"),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = if (fromMe) null else Mesh.Mono,
+                fontWeight = FontWeight.Bold,
+                color = if (fromMe) Mesh.Signal.Live else Mesh.Text.Secondary
+            )
+
+            if (audio != null) {
+                AudioBubbleContent(
+                    audio = audio,
+                    state = audioStateOf(audio.audioId),
+                    transfer = audioTransfers[audio.audioId],
+                    isPlaying = playback.audioId == audio.audioId && playback.playing,
+                    progress = if (playback.audioId == audio.audioId) playback.progress else 0f,
+                    accent = if (fromMe) Mesh.Signal.Live else Mesh.Text.Secondary,
+                    onTogglePlay = { onTogglePlay(audio.audioId) },
+                    onRetry = { onRetryAudio(audio.audioId) }
+                )
+            } else {
+                Text(
+                    entry.displayPayload,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Mesh.Text.Primary
+                )
+            }
+
+            if (entry.hasLocation) {
+                LocationBlock(entry)
+            }
+
+            Text(
+                metadataFor(entry, fromMe),
+                style = MaterialTheme.typography.labelSmall,
+                color = Mesh.Text.Tertiary
+            )
+        }
     }
 }
 
-private fun labelFor(entry: MeshLogEntry): String = when {
-    entry.isSos -> "SOS  ·  EMERGENCY"
-    entry.kind == MeshLogEntry.Kind.SENT -> "SENT"
-    entry.kind == MeshLogEntry.Kind.RECEIVED -> "RECEIVED"
-    entry.kind == MeshLogEntry.Kind.RELAYED -> "RELAYED"
-    else -> "DROPPED"
+/**
+ * Coordinates that travelled with the message. They belong to the ORIGINAL
+ * sender — a relay never overwrites them.
+ */
+@Composable
+private fun LocationBlock(entry: MeshLogEntry) {
+    val context = LocalContext.current
+    val latitude = entry.latitude ?: return
+    val longitude = entry.longitude ?: return
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Mesh.Surface.Sunken, RoundedCornerShape(Mesh.Radius.md))
+            .padding(Mesh.Space.md),
+        verticalArrangement = Arrangement.spacedBy(Mesh.Space.xs)
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.LocationOn,
+                contentDescription = null,
+                tint = Mesh.Signal.Live,
+                modifier = Modifier.size(15.dp)
+            )
+            Text(
+                "Location attached",
+                style = MaterialTheme.typography.labelSmall,
+                color = Mesh.Signal.Live
+            )
+        }
+        Text(
+            formatCoordinates(latitude, longitude),
+            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = Mesh.Mono,
+            color = Mesh.Text.Primary
+        )
+        TextButton(
+            onClick = { openInMaps(context, latitude, longitude, entry.fromNode) },
+            modifier = Modifier.heightIn(min = Mesh.TouchTarget)
+        ) {
+            Text(
+                "View location",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Mesh.Signal.Live
+            )
+        }
+    }
 }
 
-private fun accentFor(entry: MeshLogEntry): Color = when {
-    entry.isSos -> MeshColors.Red
-    entry.kind == MeshLogEntry.Kind.RECEIVED -> MeshColors.Cyan
-    entry.kind == MeshLogEntry.Kind.RELAYED -> MeshColors.Amber
-    entry.kind == MeshLogEntry.Kind.SENT -> MeshColors.Green
-    else -> MeshColors.Border
+/** Opens any installed maps app. Works offline if that app has offline data. */
+private fun openInMaps(context: Context, latitude: Double, longitude: Double, fromNode: String?) {
+    val label = Uri.encode("DisasterMesh SOS ${fromNode ?: ""}".trim())
+    val uri = Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude($label)")
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+    } catch (e: ActivityNotFoundException) {
+        // The coordinates are already on screen, so nothing is lost.
+        Toast.makeText(
+            context,
+            "No maps app installed. Coordinates: ${formatCoordinates(latitude, longitude)}",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+}
+
+private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+
+/**
+ * Real fields only. There is no delivery confirmation in the mesh, so a sent
+ * message says "Sent" and never claims to have arrived.
+ */
+private fun metadataFor(entry: MeshLogEntry, fromMe: Boolean): String {
+    val parts = mutableListOf<String>()
+    parts += timeFormat.format(Date(entry.timestamp))
+    if (fromMe) {
+        parts += "Sent"
+    } else {
+        entry.hops?.let { parts += if (it == 1) "1 hop" else "$it hops" }
+    }
+    entry.ttl?.let { parts += "TTL $it" }
+    return parts.joinToString("  ·  ")
+}
+
+/** Relay / drop events — the visible evidence of multi-hop. */
+@Composable
+private fun SystemLine(entry: MeshLogEntry) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Text(
+            entry.text,
+            style = MaterialTheme.typography.labelSmall,
+            fontFamily = Mesh.Mono,
+            color = if (entry.kind == MeshLogEntry.Kind.RELAYED) {
+                Mesh.Signal.Warning
+            } else {
+                Mesh.Text.Tertiary
+            },
+            modifier = Modifier
+                .background(Mesh.Surface.Sunken, RoundedCornerShape(Mesh.Radius.sm))
+                .padding(horizontal = Mesh.Space.md, vertical = Mesh.Space.sm)
+        )
+    }
 }
