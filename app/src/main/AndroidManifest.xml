@@ -43,6 +43,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
+    <!-- Voice messages. Requested at the moment the user first taps record,
+         never at startup, and the rest of the app works without it. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Used ONLY by the optional gateway uplink. The mesh itself never touches
+         the internet, and with no endpoint configured nothing is ever sent. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -62,6 +70,27 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Declares this app as suitable for satellite-constrained data, which is
+             what PROPERTY_SATELLITE_DATA_OPTIMIZED is for: small, high-value
+             emergency payloads rather than bulk traffic. Harmlessly ignored on
+             devices and Android versions without satellite support. -->
+        <property
+            android:name="android.telephony.satellite.PROPERTY_SATELLITE_DATA_OPTIMIZED"
+            android:value="true" />
+
+        <!-- Home-screen emergency panel. Not exported to other apps; the system
+             delivers widget broadcasts to it regardless. -->
+        <receiver
+            android:name=".widget.DisasterMeshWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/disaster_mesh_widget_info" />
+        </receiver>
 
         <service
             android:name=".service.MeshForegroundService"

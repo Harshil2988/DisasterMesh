@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Three horizontal bands inside one wide rectangle:
+
+    A  header      compact, wrap_content
+    B  action row  four equal-weight buttons, takes the remaining height
+    C  status bar  thin, separated by a hairline
+
+  Plain nested LinearLayouts because RemoteViews does not support
+  ConstraintLayout. Equal weights keep the four actions side-by-side at every
+  width the launcher may hand us.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/w_bg_panel"
+    android:padding="8dp">
+
+    <!-- SECTION A — header. Tapping opens the app. -->
+    <LinearLayout
+        android:id="@+id/widget_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚡ DISASTERMESH"
+            android:textColor="@color/w_text"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:singleLine="true" />
+
+        <TextView
+            android:id="@+id/widget_status"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="● MESH OFFLINE"
+            android:textColor="@color/w_text_dim"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_node"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="NODE-••••"
+            android:textColor="@color/w_cyan"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:singleLine="true" />
+    </LinearLayout>
+
+    <!-- SECTION B — four equal actions, left to right. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:id="@+id/widget_sos"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/w_bg_sos"
+            android:layout_marginEnd="5dp"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔴"
+                android:textSize="13sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SOS"
+                android:textColor="@color/w_red"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:singleLine="true" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Emergency"
+                android:textColor="@color/w_text_dim"
+                android:textSize="9sp"
+                android:singleLine="true" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_safe"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/w_bg_safe"
+            android:layout_marginEnd="5dp"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🟢"
+                android:textSize="13sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="I'M SAFE"
+                android:textColor="@color/w_green"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:singleLine="true" />
+            <TextView
+                android:id="@+id/widget_safe_sub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Safe check"
+                android:textColor="@color/w_text_dim"
+                android:textSize="9sp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_message"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/w_bg_neutral"
+            android:layout_marginEnd="5dp"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="💬"
+                android:textSize="13sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SEND MSG"
+                android:textColor="@color/w_text"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:singleLine="true" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Quick message"
+                android:textColor="@color/w_text_dim"
+                android:textSize="9sp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_mesh"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/w_bg_mesh"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚡"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/widget_mesh_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="START MESH"
+                android:textColor="@color/w_cyan"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:singleLine="true" />
+            <TextView
+                android:id="@+id/widget_mesh_sub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Mesh control"
+                android:textColor="@color/w_text_dim"
+                android:textSize="9sp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!--
+      Hairline separating the actions from the status line.
+
+      MUST NOT be a bare <View>: RemoteViews only permits a fixed whitelist of
+      view classes, and android.view.View is not on it. Inflating one makes the
+      launcher throw "Class not allowed to be inflated android.view.View" and
+      show "An error occurred when loading widget". FrameLayout is whitelisted
+      and renders a background at a fixed height just the same.
+    -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/w_divider" />
+
+    <!-- SECTION C — device count, on its own line. -->
+    <TextView
+        android:id="@+id/widget_devices"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="5dp"
+        android:text="● DEVICES CONNECTED: —"
+        android:textColor="@color/w_text_dim"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:singleLine="true"
+        android:ellipsize="end" />
+</LinearLayout>

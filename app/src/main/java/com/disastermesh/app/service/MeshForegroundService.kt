@@ -13,6 +13,14 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.disastermesh.app.widget.DisasterMeshWidgetProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import com.disastermesh.app.MainActivity
 import com.disastermesh.app.R
 
@@ -55,14 +63,41 @@ class MeshForegroundService : Service() {
         }
 
         MeshNodeHolder.get(this).startMesh()
+
+        // Store-carry-forward follows the mesh lifecycle too: when the mesh is
+        // running this node retains messages and syncs with peers it meets.
+        MeshNodeHolder.sync(this).start()
+
+        // Gateway monitoring follows the mesh lifecycle, in the SAME service, so
+        // no second foreground service is created. This does not touch the relay
+        // path: the uplink only observes connectivity and drains its own queue.
+        MeshNodeHolder.uplink(this).start { emergencyReportsSnapshot() }
+
+        // Event-driven widget refresh: only when the mesh flips active or the
+        // peer count actually changes. No polling, no timer.
+        widgetWatcher?.cancel()
+        widgetWatcher = serviceScope.launch {
+            MeshNodeHolder.get(this@MeshForegroundService).state
+                .map { it.meshActive to it.connectedCount }
+                .distinctUntilChanged()
+                .collect { DisasterMeshWidgetProvider.refresh(this@MeshForegroundService) }
+        }
+
         Log.d(TAG, "Mesh service started")
 
         // Restart if Android reclaims the process while the mesh is meant to run.
         return START_STICKY
     }
 
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var widgetWatcher: Job? = null
+
     override fun onDestroy() {
+        widgetWatcher?.cancel()
+        MeshNodeHolder.sync(this).stop()
+        MeshNodeHolder.uplink(this).stop()
         MeshNodeHolder.get(this).stopMesh()
+        DisasterMeshWidgetProvider.refresh(this)
         Log.d(TAG, "Mesh service destroyed; mesh stopped")
         super.onDestroy()
     }
@@ -70,7 +105,17 @@ class MeshForegroundService : Service() {
     /** Not a bound service. */
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * Reports available for uplink, read from the SHARED repository — the same
+     * instance the Command Center and map use, so there is no second store.
+     */
+    private fun emergencyReportsSnapshot():
+        List<com.disastermesh.app.command.EmergencyReport> =
+        MeshNodeHolder.reports(this).reports.value
+
     private fun stopMeshAndSelf() {
+        MeshNodeHolder.sync(this).stop()
+        MeshNodeHolder.uplink(this).stop()
         MeshNodeHolder.get(this).stopMesh()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

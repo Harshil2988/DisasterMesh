@@ -1,0 +1,16 @@
+<resources>
+    <!-- Mirrors the in-app Mesh design tokens so the widget reads as the same
+         product. Duplicated here because RemoteViews cannot reference Compose. -->
+    <color name="w_backdrop">#0B1220</color>
+    <color name="w_surface">#141B2D</color>
+    <color name="w_sunken">#080D1A</color>
+    <color name="w_line">#1B2537</color>
+    <color name="w_text">#F8FAFC</color>
+    <color name="w_text_dim">#94A3B8</color>
+    <color name="w_text_faint">#64748B</color>
+    <color name="w_cyan">#38BDF8</color>
+    <color name="w_red">#EF4444</color>
+    <color name="w_red_deep">#7F1D1D</color>
+    <color name="w_green">#22C55E</color>
+    <color name="w_green_deep">#14532D</color>
+</resources>

@@ -17,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.disastermesh.app.nearby.MeshPermissions
 import com.disastermesh.app.notify.NotificationPreferences
@@ -43,6 +44,9 @@ class MainActivity : ComponentActivity() {
     /** Which message the tapped notification referred to, for highlighting. */
     private val highlightMessageId = mutableStateOf<String?>(null)
 
+    /** Bumped when the home-screen widget asks for the SOS confirmation. */
+    private val openSosNonce = mutableStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // The UI is dark-only, so the system bars get light icons on a transparent ground.
@@ -59,6 +63,15 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsState()
                 val missing = missingPermissions.value
                 val category by viewModel.selectedCategory
+                val reports by viewModel.emergencyReports.collectAsState()
+                val counts by viewModel.reportCounts.collectAsState()
+                val mapData by viewModel.mapData.collectAsState()
+                val uplinkStatus by viewModel.uplinkStatus.collectAsState()
+                val syncStatus by viewModel.syncStatus.collectAsState()
+                val playback by viewModel.playback.collectAsState()
+                val audioTransfers by viewModel.audioTransfers.collectAsState()
+                val uplinkEvents by viewModel.uplinkEvents.collectAsState()
+                val uplinkQueue by viewModel.uplinkQueue.collectAsState()
 
                 val permissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -75,6 +88,22 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     maybeAskForNotificationPermission { notificationLauncher.launch(it) }
+                }
+
+                // Microphone is requested the FIRST time the user taps record,
+                // never at startup. Declining leaves the rest of the app intact.
+                val micLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) viewModel.startRecording()
+                }
+
+                // Keeps the playback progress bar tracking the real position.
+                LaunchedEffect(playback.playing) {
+                    while (playback.playing) {
+                        viewModel.refreshPlaybackPosition()
+                        kotlinx.coroutines.delay(200)
+                    }
                 }
 
                 DisasterMeshApp(
@@ -96,6 +125,44 @@ class MainActivity : ComponentActivity() {
                     onStopMesh = viewModel::stopMesh,
                     onSendHello = viewModel::sendHello,
                     onSendMessage = viewModel::sendMessage,
+                    reports = reports,
+                    reportCounts = counts,
+                    onSetReportStatus = viewModel::setReportStatus,
+                    mapData = mapData,
+                    mapFocusReportId = viewModel.mapFocusReportId.value,
+                    onMapFocusHandled = viewModel::clearMapFocus,
+                    onFocusReportOnMap = viewModel::focusReportOnMap,
+                    onRequestMyLocation = viewModel::refreshMyLocation,
+                    locationUnavailable = viewModel.locationUnavailable.value,
+                    uplinkStatus = uplinkStatus,
+                    syncStatus = syncStatus,
+                    recording = viewModel.recording.value,
+                    recordElapsedMs = viewModel.recordElapsedMs.value,
+                    pendingAudioDurationMs = viewModel.pendingAudio.value?.durationMs,
+                    audioError = viewModel.audioError.value,
+                    audioStateOf = viewModel::audioStateOf,
+                    audioTransfers = audioTransfers,
+                    playback = playback,
+                    onStartRecording = {
+                        if (ContextCompat.checkSelfPermission(
+                                this, Manifest.permission.RECORD_AUDIO
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        ) {
+                            viewModel.startRecording()
+                        } else {
+                            micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    },
+                    onStopRecording = viewModel::stopRecording,
+                    onCancelRecording = viewModel::cancelRecording,
+                    onDiscardAudio = viewModel::discardPendingAudio,
+                    onSendAudio = viewModel::sendPendingAudio,
+                    onTogglePreview = viewModel::togglePreviewPlayback,
+                    onTogglePlay = viewModel::togglePlayback,
+                    onRetryAudio = viewModel::retryAudio,
+                    onDismissAudioError = viewModel::dismissAudioError,
+                    uplinkEvents = uplinkEvents,
+                    deliveryStates = uplinkQueue.mapValues { it.value.state },
                     onSendSos = viewModel::confirmSos,
                     onSosDialogOpened = viewModel::beginSosFlow,
                     onSendSosWithoutLocation = viewModel::sendSosWithoutLocation,
@@ -106,6 +173,7 @@ class MainActivity : ComponentActivity() {
                     onMessageNotificationsChange = viewModel::setMessageNotifications,
                     onSosNotificationsChange = viewModel::setSosNotifications,
                     openMessagesNonce = openMessagesNonce.value,
+                    openSosNonce = openSosNonce.value,
                     highlightMessageId = highlightMessageId.value
                 )
             }
@@ -121,6 +189,11 @@ class MainActivity : ComponentActivity() {
 
     /** Reads the extras a notification's PendingIntent carries. */
     private fun handleNotificationIntent(intent: Intent?) {
+        // The widget's SOS button routes here so the EXISTING confirmation flow,
+        // location acquisition and SOS payload are used unchanged.
+        if (intent?.getBooleanExtra(EXTRA_OPEN_SOS, false) == true) {
+            openSosNonce.value += 1
+        }
         if (intent?.getBooleanExtra(EXTRA_OPEN_MESSAGES, false) != true) return
         highlightMessageId.value = intent.getStringExtra(EXTRA_MESSAGE_ID)
         openMessagesNonce.value += 1
@@ -168,6 +241,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OPEN_MESSAGES = "open_messages"
+        const val EXTRA_OPEN_SOS = "open_sos"
         const val EXTRA_MESSAGE_ID = "message_id"
     }
 }

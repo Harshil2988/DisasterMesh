@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.HorizontalDivider
@@ -47,7 +48,22 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.disastermesh.app.command.EmergencyReport
+import com.disastermesh.app.command.ReportCounts
+import com.disastermesh.app.command.ReportStatus
 import com.disastermesh.app.nearby.MeshState
+import com.disastermesh.app.map.MapData
+import com.disastermesh.app.audio.AudioState
+import com.disastermesh.app.audio.AudioTransfer
+import com.disastermesh.app.audio.PlaybackState
+import com.disastermesh.app.ui.components.AudioPreviewPanel
+import com.disastermesh.app.ui.components.RecordingPanel
+import com.disastermesh.app.sync.SyncStatus
+import com.disastermesh.app.uplink.DeliveryState
+import com.disastermesh.app.uplink.UplinkEvent
+import com.disastermesh.app.uplink.UplinkStatus
+import com.disastermesh.app.ui.screens.CommandScreen
+import com.disastermesh.app.ui.screens.MapScreen
 import com.disastermesh.app.ui.components.MeshPanel
 import com.disastermesh.app.ui.components.MessageComposer
 import com.disastermesh.app.ui.screens.HomeScreen
@@ -58,10 +74,21 @@ import com.disastermesh.app.ui.theme.Mesh
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Filled.Home),
+    MAP("Map", Icons.Filled.Place),
+    COMMAND("Command", Icons.Filled.Warning),
     MESSAGES("Messages", Icons.Filled.Email),
     MESH("Mesh", Icons.Filled.Share),
+
+    /**
+     * Reached from the Home header rather than the bottom bar: five destinations
+     * is the practical limit for a bottom nav, and Info is a read-once explainer
+     * rather than somewhere you return to.
+     */
     INFO("Info", Icons.Filled.Info)
 }
+
+/** Only these appear in the bottom bar. */
+private val BOTTOM_TABS = listOf(Tab.HOME, Tab.MAP, Tab.COMMAND, Tab.MESSAGES, Tab.MESH)
 
 /**
  * App shell: a scrolling content area, a docked composer on Messages, and the
@@ -88,11 +115,41 @@ fun DisasterMeshApp(
     onSosCancelled: () -> Unit,
     onSendMessage: (String) -> Unit,
     onSendHello: () -> Unit,
+    reports: List<EmergencyReport>,
+    reportCounts: ReportCounts,
+    onSetReportStatus: (String, ReportStatus) -> Unit,
+    mapData: MapData,
+    mapFocusReportId: String?,
+    onMapFocusHandled: () -> Unit,
+    onFocusReportOnMap: (String) -> Unit,
+    onRequestMyLocation: () -> Unit,
+    locationUnavailable: Boolean,
+    uplinkStatus: UplinkStatus,
+    syncStatus: SyncStatus,
+    recording: Boolean,
+    recordElapsedMs: Long,
+    pendingAudioDurationMs: Long?,
+    audioError: String?,
+    audioStateOf: (String) -> AudioState,
+    audioTransfers: Map<String, AudioTransfer>,
+    playback: PlaybackState,
+    onStartRecording: () -> Unit,
+    onStopRecording: () -> Unit,
+    onCancelRecording: () -> Unit,
+    onDiscardAudio: () -> Unit,
+    onSendAudio: () -> Unit,
+    onTogglePreview: () -> Unit,
+    onTogglePlay: (String) -> Unit,
+    onRetryAudio: (String) -> Unit,
+    onDismissAudioError: () -> Unit,
+    uplinkEvents: List<UplinkEvent>,
+    deliveryStates: Map<String, DeliveryState>,
     messageNotifications: Boolean,
     sosNotifications: Boolean,
     onMessageNotificationsChange: (Boolean) -> Unit,
     onSosNotificationsChange: (Boolean) -> Unit,
     openMessagesNonce: Int = 0,
+    openSosNonce: Int = 0,
     highlightMessageId: String? = null
 ) {
     var tab by remember { mutableStateOf(Tab.HOME) }
@@ -103,6 +160,12 @@ fun DisasterMeshApp(
     // the same notification twice still works.
     LaunchedEffect(openMessagesNonce) {
         if (openMessagesNonce > 0) tab = Tab.MESSAGES
+    }
+
+    // The widget's SOS button lands on Home, where the existing confirmation
+    // dialog opens itself.
+    LaunchedEffect(openSosNonce) {
+        if (openSosNonce > 0) tab = Tab.HOME
     }
 
     // Keep the newest message in view while reading the thread.
@@ -144,11 +207,50 @@ fun DisasterMeshApp(
                     onSendSosWithoutLocation = onSendSosWithoutLocation,
                     onSosCancelled = onSosCancelled,
                     onSendHello = onSendHello,
-                    onOpenAppSettings = onOpenAppSettings
+                    counts = reportCounts,
+                    onOpenCommand = { tab = Tab.COMMAND },
+                    onOpenMap = { tab = Tab.MAP },
+                    onOpenInfo = { tab = Tab.INFO },
+                    mapData = mapData,
+                    uplinkStatus = uplinkStatus,
+                    onOpenAppSettings = onOpenAppSettings,
+                    openSosNonce = openSosNonce
                 )
 
-                Tab.MESSAGES -> MessagesScreen(state, highlightMessageId)
-                Tab.MESH -> MeshMapScreen(state)
+                Tab.COMMAND -> CommandScreen(
+                    state = state,
+                    reports = reports,
+                    counts = reportCounts,
+                    onSetStatus = onSetReportStatus,
+                    uplinkStatus = uplinkStatus,
+                    uplinkEvents = uplinkEvents,
+                    deliveryStates = deliveryStates,
+                    onViewOnMap = { reportId ->
+                        onFocusReportOnMap(reportId)
+                        tab = Tab.MAP
+                    }
+                )
+
+                Tab.MAP -> MapScreen(
+                    state = state,
+                    data = mapData,
+                    focusReportId = mapFocusReportId,
+                    onFocusHandled = onMapFocusHandled,
+                    onOpenReport = { tab = Tab.COMMAND },
+                    onRequestMyLocation = onRequestMyLocation,
+                    locationUnavailable = locationUnavailable
+                )
+
+                Tab.MESSAGES -> MessagesScreen(
+                    state = state,
+                    highlightMessageId = highlightMessageId,
+                    audioStateOf = audioStateOf,
+                    audioTransfers = audioTransfers,
+                    playback = playback,
+                    onTogglePlay = onTogglePlay,
+                    onRetryAudio = onRetryAudio
+                )
+                Tab.MESH -> MeshMapScreen(state, syncStatus)
                 Tab.INFO -> InfoScreen(
                     messageNotifications = messageNotifications,
                     sosNotifications = sosNotifications,
@@ -159,15 +261,54 @@ fun DisasterMeshApp(
         }
 
         if (tab == Tab.MESSAGES) {
-            MessageComposer(
-                text = draft,
-                onTextChange = { draft = it },
-                onSend = {
-                    onSendMessage(draft)
-                    draft = ""
-                },
-                connected = state.isConnected
-            )
+            audioError?.let { message ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Mesh.Surface.Card)
+                        .padding(horizontal = Mesh.Space.lg, vertical = Mesh.Space.sm),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Mesh.Signal.Warning,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onDismissAudioError) {
+                        Text("Dismiss", color = Mesh.Text.Secondary)
+                    }
+                }
+            }
+
+            when {
+                recording -> RecordingPanel(
+                    elapsedMs = recordElapsedMs,
+                    onCancel = onCancelRecording,
+                    onStop = onStopRecording
+                )
+
+                pendingAudioDurationMs != null -> AudioPreviewPanel(
+                    durationMs = pendingAudioDurationMs,
+                    isPlaying = playback.playing,
+                    onTogglePlay = onTogglePreview,
+                    onDelete = onDiscardAudio,
+                    onSend = onSendAudio,
+                    canSend = state.isConnected
+                )
+
+                else -> MessageComposer(
+                    text = draft,
+                    onTextChange = { draft = it },
+                    onSend = {
+                        onSendMessage(draft)
+                        draft = ""
+                    },
+                    connected = state.isConnected,
+                    onStartRecording = onStartRecording
+                )
+            }
         }
 
         BottomBar(current = tab, onSelect = { tab = it })
@@ -189,7 +330,7 @@ private fun BottomBar(current: Tab, onSelect: (Tab) -> Unit) {
                 .padding(vertical = Mesh.Space.sm),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Tab.entries.forEach { entry ->
+            BOTTOM_TABS.forEach { entry ->
                 NavItem(
                     entry = entry,
                     selected = entry == current,
@@ -217,7 +358,7 @@ private fun NavItem(entry: Tab, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .heightIn(min = Mesh.TouchTarget)
             .selectable(selected = selected, role = Role.Tab, onClick = onClick)
-            .padding(horizontal = Mesh.Space.md, vertical = Mesh.Space.sm),
+            .padding(horizontal = Mesh.Space.sm, vertical = Mesh.Space.sm),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Mesh.Space.xs)
     ) {

@@ -56,6 +56,16 @@ class NearbyConnectionManager(context: Context) {
     /** Message ids already handled — the thing that stops the flood looping. */
     private val seen = SeenMessages()
 
+    /**
+     * Optional store-carry-forward layer.
+     *
+     * Null by default, and with it null this class behaves exactly as it did
+     * before synchronisation existed. Every call into it is wrapped so a fault
+     * in the sync layer can never reach the relay path.
+     */
+    @Volatile
+    var syncHook: MeshSyncHook? = null
+
     /** Posts local Android notifications. Cannot affect routing in any way. */
     private val notifier = MeshNotifier(appContext)
 
@@ -348,6 +358,13 @@ class NearbyConnectionManager(context: Context) {
                     log("Connected to $endpointId (${peer?.nodeId})")
                     setPeerState(endpointId, PeerState.CONNECTED)
                     setStatus("Connected to ${peer?.displayName ?: endpointId}")
+                    // Offer history to the newcomer. Runs after the peer is already
+                    // marked connected, so synchronisation never delays the UI or
+                    // the connection itself.
+                    runCatching {
+                        syncHook?.onPeerConnected(endpointId, peer?.nodeId ?: endpointId)
+                    }
+
                     // NOTE: discovery is deliberately NOT stopped here. A node must keep
                     // looking so it can also connect to the next phone in the chain
                     // while already connected to the previous one.
@@ -363,6 +380,7 @@ class NearbyConnectionManager(context: Context) {
 
         override fun onDisconnected(endpointId: String) {
             log("Disconnected from $endpointId")
+            runCatching { syncHook?.onPeerDisconnected(endpointId) }
             // Drop it from the collection. Discovery is still running, so if the node
             // is merely out of range for a moment it will be found and reconnected.
             removePeer(endpointId)
@@ -400,12 +418,47 @@ class NearbyConnectionManager(context: Context) {
 
     private val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
+            // FILE payloads carry voice-message audio. They never existed before,
+            // so routing them here cannot regress text, SOS or relay — the BYTES
+            // path below is reached exactly as it always was.
+            if (payload.type == Payload.Type.FILE) {
+                runCatching {
+                    // A descriptor rather than a java.io.File: under scoped
+                    // storage the file handle is not directly openable by us.
+                    syncHook?.onFilePayload(
+                        endpointId,
+                        payload.id,
+                        payload.asFile()?.asParcelFileDescriptor()
+                    )
+                }
+                return
+            }
+
             val bytes = payload.asBytes() ?: return
+
+            // Sync control packets carry their own magic prefix and are not mesh
+            // messages. If the sync layer claims one, it never reaches the relay
+            // pipeline below. Any failure here falls through to normal handling.
+            val consumed = runCatching { syncHook?.onRawPayload(endpointId, bytes) }
+                .getOrNull() ?: false
+            if (consumed) return
+
             handleIncoming(endpointId, bytes)
         }
 
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
-            // Byte payloads arrive in one piece, so there is nothing to track here.
+            // Byte payloads arrive in one piece; this was previously a no-op.
+            // File payloads report progress and completion here, which is the
+            // only way to know a voice message finished arriving.
+            runCatching {
+                syncHook?.onTransferUpdate(
+                    endpointId,
+                    update.payloadId,
+                    update.status,
+                    update.bytesTransferred,
+                    update.totalBytes
+                )
+            }
         }
     }
 
@@ -444,6 +497,10 @@ class NearbyConnectionManager(context: Context) {
             )
             return
         }
+
+        // Retain it for onward carriage. Reached only after step 1 and 2 above,
+        // so this cannot double-store and cannot disagree with SeenMessages.
+        runCatching { syncHook?.onMessageStored(message) }
 
         // 3. Deliver to this phone if it is the intended recipient.
         val addressedToUs = message.destinationId == nodeId
@@ -490,6 +547,59 @@ class NearbyConnectionManager(context: Context) {
 
         // 5. Forward to every connected node except the one it just came from.
         relay(next, arrivedFrom = fromEndpointId)
+    }
+
+    /**
+     * Sends a file to one peer. Nearby handles chunking, reassembly and progress
+     * natively, so no custom chunk protocol exists in this app.
+     *
+     * @return the payload id, or null when the file could not be opened.
+     */
+    fun sendFileTo(endpointId: String, file: java.io.File): Long? = try {
+        val payload = Payload.fromFile(file)
+        connectionsClient.sendPayload(endpointId, payload)
+            .addOnFailureListener { log("sendFileTo failed for $endpointId", it) }
+        payload.id
+    } catch (e: Exception) {
+        log("sendFileTo could not open ${file.name}", e)
+        null
+    }
+
+    /** Sends raw bytes to one peer. Used only by the sync layer. */
+    fun sendRawTo(endpointId: String, bytes: ByteArray) {
+        connectionsClient.sendPayload(endpointId, Payload.fromBytes(bytes))
+            .addOnFailureListener { log("sendRawTo failed for $endpointId", it) }
+    }
+
+    /**
+     * Accepts a HISTORICAL message obtained by synchronising with a peer.
+     *
+     * Goes through the same duplicate protection and lands in the same message
+     * log as live traffic, so Messages, Command Center and the map all see it.
+     * Two deliberate differences from a live message: it raises no notification,
+     * because it may be hours old, and it is not re-relayed here — onward
+     * propagation is the sync layer's job.
+     */
+    fun ingestHistorical(message: MeshMessage, syncedFrom: String?) {
+        if (message.senderId == nodeId) return
+        if (!seen.markSeen(message.messageId)) return
+
+        val origin = if (syncedFrom != null) {
+            "from ${message.senderName} · synced via $syncedFrom"
+        } else {
+            "from ${message.senderName} · synced"
+        }
+        addLog(
+            "Received: ${message.payload}  ($origin)",
+            MeshLogEntry.Kind.RECEIVED,
+            payload = message.payload,
+            fromNode = message.senderId,
+            hops = message.hops,
+            ttl = message.ttl,
+            messageId = message.messageId,
+            latitude = message.latitude,
+            longitude = message.longitude
+        )
     }
 
     private fun relay(message: MeshMessage, arrivedFrom: String) {

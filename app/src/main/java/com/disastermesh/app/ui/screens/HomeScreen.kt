@@ -10,13 +10,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -33,6 +37,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.disastermesh.app.command.ReportCounts
+import com.disastermesh.app.map.MapData
+import com.disastermesh.app.ui.components.UplinkCard
+import com.disastermesh.app.uplink.UplinkStatus
 import com.disastermesh.app.nearby.MeshState
 import com.disastermesh.app.ui.MessageCategory
 import com.disastermesh.app.ui.SosLocationState
@@ -67,13 +75,26 @@ fun HomeScreen(
     onSendSosWithoutLocation: () -> Unit,
     onSosCancelled: () -> Unit,
     onSendHello: () -> Unit,
-    onOpenAppSettings: () -> Unit
+    counts: ReportCounts,
+    onOpenCommand: () -> Unit,
+    onOpenMap: () -> Unit,
+    onOpenInfo: () -> Unit,
+    mapData: MapData,
+    uplinkStatus: UplinkStatus,
+    onOpenAppSettings: () -> Unit,
+    openSosNonce: Int = 0
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.xl)) {
 
-        Identity(state)
+        Identity(state, onOpenInfo)
 
         MeshStatusCard(state)
+
+        EmergencySummary(counts, onOpenCommand)
+
+        MapSummary(mapData, onOpenMap)
+
+        UplinkCard(uplinkStatus)
 
         MeshControl(
             active = state.meshActive,
@@ -104,6 +125,7 @@ fun HomeScreen(
             onConfirmed = onSendSos,
             onSendWithoutLocation = onSendSosWithoutLocation,
             onCancelled = onSosCancelled,
+            externalOpenNonce = openSosNonce,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -130,14 +152,133 @@ fun HomeScreen(
     }
 }
 
+/** Real counts only — straight from the reports this device received. */
 @Composable
-private fun Identity(state: MeshState) {
-    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.sm)) {
+private fun EmergencySummary(counts: ReportCounts, onOpenCommand: () -> Unit) {
+    val quiet = counts.total == 0
+    MeshPanel(
+        background = if (counts.critical > 0) {
+            Mesh.Signal.EmergencyDeep.copy(alpha = 0.14f)
+        } else {
+            Mesh.Surface.Card
+        },
+        border = if (counts.critical > 0) Mesh.Signal.Emergency.copy(alpha = 0.45f) else null
+    ) {
+        SectionLabel("Emergency status")
+
+        if (quiet) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = Mesh.Signal.Ok,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    "No active emergencies",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Mesh.Text.Primary
+                )
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(Mesh.Space.xl)) {
+                SummaryStat("Critical", counts.critical, Mesh.Signal.Emergency)
+                SummaryStat("Medical", counts.medical, Mesh.Signal.Warning)
+                SummaryStat("Supply", counts.supply, Mesh.Signal.Action)
+            }
+        }
+
+        TextButton(
+            onClick = onOpenCommand,
+            modifier = Modifier.heightIn(min = Mesh.TouchTarget)
+        ) {
+            Text(
+                "Open command centre",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Mesh.Signal.Live
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryStat(label: String, value: Int, color: androidx.compose.ui.graphics.Color) {
+    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.xs)) {
         Text(
-            "DisasterMesh",
-            style = MaterialTheme.typography.displaySmall,
-            color = Mesh.Text.Primary
+            value.toString(),
+            style = MaterialTheme.typography.headlineMedium,
+            fontFamily = Mesh.Mono,
+            color = if (value > 0) color else Mesh.Text.Tertiary
         )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Mesh.Text.Tertiary)
+    }
+}
+
+/** Counts of what the map can actually plot. No preview engine, so no cost. */
+@Composable
+private fun MapSummary(data: MapData, onOpenMap: () -> Unit) {
+    MeshPanel {
+        SectionLabel("Disaster map")
+        Row(horizontalArrangement = Arrangement.spacedBy(Mesh.Space.xl)) {
+            SummaryStat(
+                "Located reports",
+                data.reports.size,
+                if (data.reports.isEmpty()) Mesh.Text.Tertiary else Mesh.Signal.Emergency
+            )
+            SummaryStat(
+                "Mapped nodes",
+                data.nodes.size,
+                if (data.nodes.isEmpty()) Mesh.Text.Tertiary else Mesh.Signal.Live
+            )
+        }
+        TextButton(
+            onClick = onOpenMap,
+            modifier = Modifier.heightIn(min = Mesh.TouchTarget)
+        ) {
+            Text(
+                "Open live map",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Mesh.Signal.Live
+            )
+        }
+    }
+}
+
+@Composable
+private fun Identity(state: MeshState, onOpenInfo: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.sm)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "DisasterMesh",
+                style = MaterialTheme.typography.displaySmall,
+                color = Mesh.Text.Primary
+            )
+            // Info lives here rather than in the bottom bar, which is capped at
+            // five destinations. Still one tap away.
+            Box(
+                modifier = Modifier
+                    .size(Mesh.TouchTarget)
+                    .background(Mesh.Surface.Card, CircleShape)
+                    .selectable(selected = false, onClick = onOpenInfo),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Info,
+                    contentDescription = "About DisasterMesh",
+                    tint = Mesh.Signal.Live,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(Mesh.Space.md),
             verticalAlignment = Alignment.CenterVertically

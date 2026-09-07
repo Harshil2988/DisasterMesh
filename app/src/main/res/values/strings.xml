@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">DisasterMesh</string>
+    <string name="widget_description">Emergency control panel: SOS, safe check-in, quick message and mesh status.</string>
 </resources>

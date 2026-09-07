@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Wide landscape panel: 4 cells across, 2 down.
+
+  Sizing notes — this is what previously produced a near-square widget:
+   - minWidth is now 320dp. At the common ~70dp launcher cell, 250dp only
+     guaranteed 3 columns, so launchers were free to place a 3x2 box that looks
+     almost square. 320dp forces at least 4 columns.
+   - maxResizeHeight caps vertical growth, so the widget cannot be dragged into
+     a tall square. Height is deliberately constrained while width is free.
+   - resizeMode stays horizontal only, reinforcing the landscape shape.
+
+  updatePeriodMillis is 0 on purpose: Android clamps periodic widget updates to
+  30 minutes, useless for live mesh state. Refreshes are event-driven instead.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="320dp"
+    android:minHeight="100dp"
+    android:minResizeWidth="250dp"
+    android:minResizeHeight="100dp"
+    android:maxResizeHeight="140dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/widget_disaster_mesh"
+    android:previewLayout="@layout/widget_disaster_mesh"
+    android:description="@string/widget_description"
+    android:updatePeriodMillis="0" />

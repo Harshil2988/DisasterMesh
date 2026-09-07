@@ -30,6 +30,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.disastermesh.app.audio.AudioMessage
+import com.disastermesh.app.audio.AudioState
+import com.disastermesh.app.audio.AudioTransfer
+import com.disastermesh.app.audio.PlaybackState
+import com.disastermesh.app.ui.components.AudioBubbleContent
 import com.disastermesh.app.nearby.MeshLogEntry
 import com.disastermesh.app.nearby.MeshState
 import com.disastermesh.app.ui.components.LiveDot
@@ -48,7 +53,15 @@ import java.util.Locale
  * the mesh is doing its job. Every field shown is real.
  */
 @Composable
-fun MessagesScreen(state: MeshState, highlightMessageId: String? = null) {
+fun MessagesScreen(
+    state: MeshState,
+    highlightMessageId: String? = null,
+    audioStateOf: (String) -> AudioState = { AudioState.PENDING },
+    audioTransfers: Map<String, AudioTransfer> = emptyMap(),
+    playback: PlaybackState = PlaybackState(),
+    onTogglePlay: (String) -> Unit = {},
+    onRetryAudio: (String) -> Unit = {}
+) {
     Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.lg)) {
 
         Text(
@@ -68,8 +81,16 @@ fun MessagesScreen(state: MeshState, highlightMessageId: String? = null) {
         state.messages.forEach { entry ->
             val highlighted = highlightMessageId != null && entry.messageId == highlightMessageId
             when (entry.kind) {
-                MeshLogEntry.Kind.SENT -> Bubble(entry, fromMe = true, highlighted = highlighted)
-                MeshLogEntry.Kind.RECEIVED -> Bubble(entry, fromMe = false, highlighted = highlighted)
+                MeshLogEntry.Kind.SENT -> Bubble(
+                    entry, fromMe = true, highlighted = highlighted,
+                    audioStateOf = audioStateOf, audioTransfers = audioTransfers,
+                    playback = playback, onTogglePlay = onTogglePlay, onRetryAudio = onRetryAudio
+                )
+                MeshLogEntry.Kind.RECEIVED -> Bubble(
+                    entry, fromMe = false, highlighted = highlighted,
+                    audioStateOf = audioStateOf, audioTransfers = audioTransfers,
+                    playback = playback, onTogglePlay = onTogglePlay, onRetryAudio = onRetryAudio
+                )
                 else -> SystemLine(entry)
             }
         }
@@ -141,7 +162,17 @@ private fun EmptyMessages(meshActive: Boolean) {
 }
 
 @Composable
-private fun Bubble(entry: MeshLogEntry, fromMe: Boolean, highlighted: Boolean) {
+private fun Bubble(
+    entry: MeshLogEntry,
+    fromMe: Boolean,
+    highlighted: Boolean,
+    audioStateOf: (String) -> AudioState,
+    audioTransfers: Map<String, AudioTransfer>,
+    playback: PlaybackState,
+    onTogglePlay: (String) -> Unit,
+    onRetryAudio: (String) -> Unit
+) {
+    val audio = AudioMessage.decode(entry.payload)
     val sos = entry.isSos
     val accent = when {
         sos -> Mesh.Signal.Emergency
@@ -198,11 +229,24 @@ private fun Bubble(entry: MeshLogEntry, fromMe: Boolean, highlighted: Boolean) {
                 color = if (fromMe) Mesh.Signal.Live else Mesh.Text.Secondary
             )
 
-            Text(
-                entry.displayPayload,
-                style = MaterialTheme.typography.bodyLarge,
-                color = Mesh.Text.Primary
-            )
+            if (audio != null) {
+                AudioBubbleContent(
+                    audio = audio,
+                    state = audioStateOf(audio.audioId),
+                    transfer = audioTransfers[audio.audioId],
+                    isPlaying = playback.audioId == audio.audioId && playback.playing,
+                    progress = if (playback.audioId == audio.audioId) playback.progress else 0f,
+                    accent = if (fromMe) Mesh.Signal.Live else Mesh.Text.Secondary,
+                    onTogglePlay = { onTogglePlay(audio.audioId) },
+                    onRetry = { onRetryAudio(audio.audioId) }
+                )
+            } else {
+                Text(
+                    entry.displayPayload,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Mesh.Text.Primary
+                )
+            }
 
             if (entry.hasLocation) {
                 LocationBlock(entry)

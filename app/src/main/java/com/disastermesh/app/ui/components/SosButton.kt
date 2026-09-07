@@ -64,9 +64,20 @@ fun SosButton(
     onConfirmed: () -> Unit,
     onSendWithoutLocation: () -> Unit,
     onCancelled: () -> Unit,
+    /** Incremented by the home-screen widget to open this same dialog. */
+    externalOpenNonce: Int = 0,
     modifier: Modifier = Modifier
 ) {
     var showConfirm by remember { mutableStateOf(false) }
+
+    // Opens the SAME confirmation the in-app button uses, so the widget cannot
+    // reach a different SOS path.
+    androidx.compose.runtime.LaunchedEffect(externalOpenNonce) {
+        if (externalOpenNonce > 0 && enabled) {
+            showConfirm = true
+            onOpened()
+        }
+    }
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
 

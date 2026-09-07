@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.disastermesh.app.nearby.MeshLogEntry
 import com.disastermesh.app.nearby.MeshState
+import com.disastermesh.app.sync.SyncStatus
 import com.disastermesh.app.ui.components.LiveDot
 import com.disastermesh.app.ui.components.MeshPanel
 import com.disastermesh.app.ui.components.NodeTag
@@ -49,7 +50,7 @@ import kotlin.math.sin
  * the centre and never invents relationships between two remote nodes.
  */
 @Composable
-fun MeshMapScreen(state: MeshState) {
+fun MeshMapScreen(state: MeshState, syncStatus: SyncStatus) {
     Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.xl)) {
 
         Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.xs)) {
@@ -86,6 +87,8 @@ fun MeshMapScreen(state: MeshState) {
         }
 
         MeshHealth(state)
+
+        SyncSection(syncStatus)
 
         Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.md)) {
             SectionLabel("Connected nodes (${state.connectedCount})")
@@ -163,6 +166,76 @@ private fun MeshHealth(state: MeshState) {
             ReadoutRow("Messages relayed", relayed.toString(), Mesh.Signal.Warning, mono = true)
             Text(
                 "Counted from this node's recent event log, which keeps the latest 100 events.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Mesh.Text.Tertiary
+            )
+        }
+    }
+}
+
+/**
+ * Store-carry-forward status. Every figure is a real counter maintained by the
+ * sync layer — nothing here is estimated.
+ */
+@Composable
+private fun SyncSection(status: SyncStatus) {
+    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.md)) {
+        SectionLabel("Message sync")
+        MeshPanel {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LiveDot(
+                    active = status.activeSyncs > 0,
+                    color = if (status.activeSyncs > 0) Mesh.Signal.Warning else Mesh.Signal.Ok,
+                    size = 8
+                )
+                Text(
+                    when {
+                        status.activeSyncs > 0 -> "Synchronising…"
+                        status.peers.isNotEmpty() -> "Sync complete"
+                        else -> "Idle"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Mesh.Text.Primary
+                )
+            }
+
+            ReadoutRow("Messages carried", status.carrying.toString(), Mesh.Signal.Live, mono = true)
+            ReadoutRow("Received via sync", status.totalReceived.toString(), Mesh.Text.Primary, mono = true)
+            ReadoutRow("Shared with peers", status.totalSent.toString(), Mesh.Text.Primary, mono = true)
+
+            status.lastEvent?.let { event ->
+                Text(event, style = MaterialTheme.typography.labelSmall, color = Mesh.Signal.Ok)
+            }
+
+            if (status.peers.isNotEmpty()) {
+                status.peers.values.sortedBy { it.nodeId }.forEach { peer ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            peer.nodeId,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = Mesh.Mono,
+                            color = Mesh.Text.Secondary
+                        )
+                        Text(
+                            if (peer.syncing) "syncing…" else "+${peer.received} / -${peer.sent}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = Mesh.Mono,
+                            color = if (peer.syncing) Mesh.Signal.Warning else Mesh.Text.Tertiary
+                        )
+                    }
+                }
+            }
+
+            Text(
+                "This node carries messages for the mesh and offers them to any node " +
+                    "it meets that does not have them yet.",
                 style = MaterialTheme.typography.labelSmall,
                 color = Mesh.Text.Tertiary
             )
