@@ -77,6 +77,26 @@ object Mesh {
 
         /** Inactive / off. */
         val Idle = Color(0xFF475569)
+
+        /**
+         * Medical. Clinical rather than alarming: distinct from Emergency so a
+         * screen of medical reports never reads as a screen of fatalities.
+         */
+        val Medical = Color(0xFFA78BFA)
+
+        /**
+         * Supply. Deliberately the quietest accent — logistics is not danger,
+         * and giving it a loud colour is what turns the palette into a rainbow.
+         */
+        val Supply = Color(0xFF7C93B8)
+
+        /**
+         * Grounds: near-black tints used as the FILL behind an accent, so an
+         * emergency control can be unmistakable without flooding the screen.
+         */
+        val EmergencyGround = Color(0xFF2A0E14)
+        val WarningGround = Color(0xFF2E1F05)
+        val OkGround = Color(0xFF0C2A18)
     }
 
     /**
@@ -91,6 +111,12 @@ object Mesh {
         val xl = 20.dp
         val xxl = 24.dp
         val xxxl = 32.dp
+
+        /** Separates one major region of a screen from the next. */
+        val huge = 40.dp
+
+        /** Reserved for the gap above a screen's primary emergency action. */
+        val giant = 48.dp
     }
 
     object Radius {
@@ -112,6 +138,28 @@ object Mesh {
  * drops below 12sp. Caps are reserved for short status labels only.
  */
 private val MeshTypography = Typography(
+    /**
+     * Emergency. One number or state word, used at most once per screen — a
+     * connected-device count, an active-emergency count. Nothing else earns it.
+     */
+    displayLarge = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 44.sp,
+        lineHeight = 48.sp,
+        letterSpacing = (-1.2).sp
+    ),
+    /**
+     * Status. The single voice for MESH ACTIVE / CONNECTING / SYNCING across
+     * every screen, so the network never describes itself two different ways.
+     */
+    titleSmall = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 18.sp,
+        letterSpacing = 0.4.sp
+    ),
     displaySmall = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,

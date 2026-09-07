@@ -1,65 +1,70 @@
 package com.disastermesh.app.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.disastermesh.app.command.ReportCounts
 import com.disastermesh.app.map.MapData
-import com.disastermesh.app.ui.components.UplinkCard
-import com.disastermesh.app.uplink.UplinkStatus
 import com.disastermesh.app.nearby.MeshState
 import com.disastermesh.app.ui.MessageCategory
 import com.disastermesh.app.ui.SosLocationState
-import com.disastermesh.app.ui.components.CategorySelector
-import com.disastermesh.app.ui.components.LiveDot
-import com.disastermesh.app.ui.components.MeshControl
-import com.disastermesh.app.ui.components.MeshPanel
-import com.disastermesh.app.ui.components.NodeTag
-import com.disastermesh.app.ui.components.SectionLabel
+import com.disastermesh.app.ui.components.MeshAction
+import com.disastermesh.app.ui.components.MeshChip
+import com.disastermesh.app.ui.components.MeshErrorNotice
+import com.disastermesh.app.ui.components.MeshIntent
+import com.disastermesh.app.ui.components.MeshMetricLarge
+import com.disastermesh.app.ui.components.MeshPreviewRow
+import com.disastermesh.app.ui.components.MeshSectionHeader
+import com.disastermesh.app.ui.components.MeshStatus
+import com.disastermesh.app.ui.components.MeshStatusKind
 import com.disastermesh.app.ui.components.SosButton
-import com.disastermesh.app.ui.components.StatusChip
 import com.disastermesh.app.ui.theme.Mesh
+import com.disastermesh.app.uplink.UplinkStatus
 
 /**
- * The dashboard.
+ * The control centre.
  *
- * Answers four questions in the first two seconds: who am I, is the mesh live,
- * how many nodes can I reach, and how do I raise an alarm. Every value is read
- * from the real [MeshState]; nothing here is hardcoded.
+ * Answers exactly three questions, in this order: am I connected, is anything
+ * wrong, and what can I do right now. Everything else on this screen is a
+ * one-line gateway into the screen that actually owns that subject.
+ *
+ * The previous version stacked ten full-width panels of identical weight, three
+ * of which were miniature copies of other screens. Nothing was wrong with any
+ * one of them; the flatness was the problem. Weight is now spent deliberately.
+ *
+ * Every value is read from the real [MeshState], [ReportCounts], [MapData] and
+ * [UplinkStatus] — nothing here is invented, and an unavailable value says so.
  */
 @Composable
 fun HomeScreen(
@@ -84,53 +89,95 @@ fun HomeScreen(
     onOpenAppSettings: () -> Unit,
     openSosNonce: Int = 0
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.xl)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.xxl)) {
 
         Identity(state, onOpenInfo)
 
-        MeshStatusCard(state)
-
-        EmergencySummary(counts, onOpenCommand)
-
-        MapSummary(mapData, onOpenMap)
-
-        UplinkCard(uplinkStatus)
-
-        MeshControl(
-            active = state.meshActive,
-            enabled = permissionsGranted,
-            onToggle = { if (state.meshActive) onStopMesh() else onStartMesh() }
+        NetworkBanner(
+            state = state,
+            permissionsGranted = permissionsGranted,
+            onStartMesh = onStartMesh,
+            onStopMesh = onStopMesh
         )
 
-        // Real error state: the mesh is meant to be on, but a radio did not start.
+        // A genuine failure state: the mesh is meant to be on but a radio never
+        // started. Shown only when true, never as decoration.
         AnimatedVisibility(
             visible = state.meshActive && !(state.advertising && state.discovering),
-            enter = fadeIn(tween(250)) + expandVertically(),
-            exit = fadeOut(tween(200)) + shrinkVertically()
+            enter = fadeIn(tween(220)) + expandVertically(tween(220)),
+            exit = fadeOut(tween(160)) + shrinkVertically(tween(160))
         ) {
-            MeshErrorCard(state.status, onOpenAppSettings)
+            MeshErrorNotice(
+                title = "Radio did not start",
+                body = state.status.ifBlank {
+                    "The mesh is on but a radio was refused. Open app settings and allow Nearby devices."
+                }
+            ) {
+                TextButton(
+                    onClick = onOpenAppSettings,
+                    modifier = Modifier.heightIn(min = Mesh.TouchTarget)
+                ) {
+                    Text(
+                        "App settings",
+                        color = Mesh.Signal.Warning,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
         }
 
+        // ---- Primary action ------------------------------------------------
         Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.md)) {
-            SectionLabel("Emergency broadcast")
-            CategorySelector(selected = selectedCategory, onSelect = onSelectCategory)
+            MeshSectionHeader("Emergency broadcast")
+            CategoryRow(selected = selectedCategory, onSelect = onSelectCategory)
+            SosButton(
+                enabled = state.isConnected,
+                categoryLabel = selectedCategory.label,
+                connectedCount = state.connectedCount,
+                locationState = sosLocation,
+                onOpened = onSosDialogOpened,
+                onConfirmed = onSendSos,
+                onSendWithoutLocation = onSendSosWithoutLocation,
+                onCancelled = onSosCancelled,
+                externalOpenNonce = openSosNonce,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
-        SosButton(
-            enabled = state.isConnected,
-            categoryLabel = selectedCategory.label,
-            connectedCount = state.connectedCount,
-            locationState = sosLocation,
-            onOpened = onSosDialogOpened,
-            onConfirmed = onSendSos,
-            onSendWithoutLocation = onSendSosWithoutLocation,
-            onCancelled = onSosCancelled,
-            externalOpenNonce = openSosNonce,
-            modifier = Modifier.fillMaxWidth()
-        )
+        // ---- Gateways --------------------------------------------------------
+        // One line each. Home says what is happening and where to go; it does
+        // not try to be a small copy of four other screens.
+        Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.md)) {
+            MeshSectionHeader("Overview")
 
-        // Kept from the working build: a one-tap plain message for verifying a
-        // link on real phones without typing. Demoted to a quiet secondary action.
+            MeshPreviewRow("Emergency status", onOpenCommand) {
+                MeshMetricLarge(
+                    value = counts.critical.toString(),
+                    label = "Critical",
+                    valueColor = if (counts.critical > 0) Mesh.Signal.Emergency else Mesh.Text.Primary
+                )
+                MeshMetricLarge(
+                    value = counts.medical.toString(),
+                    label = "Medical",
+                    valueColor = if (counts.medical > 0) Mesh.Signal.Medical else Mesh.Text.Primary
+                )
+                MeshMetricLarge(
+                    value = counts.warning.toString(),
+                    label = "Warning",
+                    valueColor = if (counts.warning > 0) Mesh.Signal.Warning else Mesh.Text.Primary
+                )
+            }
+
+            MeshPreviewRow("Disaster map", onOpenMap) {
+                MeshMetricLarge(mapData.reports.size.toString(), "Located reports")
+                MeshMetricLarge(mapData.nodes.size.toString(), "Mapped nodes")
+            }
+
+            UplinkLine(uplinkStatus)
+        }
+
+        // Kept from the working build: a one-tap plain message for confirming a
+        // link on real phones without typing. Quiet, and last.
         if (state.isConnected) {
             TextButton(
                 onClick = onSendHello,
@@ -140,227 +187,202 @@ fun HomeScreen(
             ) {
                 Text(
                     "Send test ping",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Mesh.Text.Secondary
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Mesh.Text.Tertiary
                 )
             }
         }
-
-        if (state.meshActive) {
-            NearbyNodes(state)
-        }
     }
 }
 
-/** Real counts only — straight from the reports this device received. */
-@Composable
-private fun EmergencySummary(counts: ReportCounts, onOpenCommand: () -> Unit) {
-    val quiet = counts.total == 0
-    MeshPanel(
-        background = if (counts.critical > 0) {
-            Mesh.Signal.EmergencyDeep.copy(alpha = 0.14f)
-        } else {
-            Mesh.Surface.Card
-        },
-        border = if (counts.critical > 0) Mesh.Signal.Emergency.copy(alpha = 0.45f) else null
-    ) {
-        SectionLabel("Emergency status")
-
-        if (quiet) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    tint = Mesh.Signal.Ok,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    "No active emergencies",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Mesh.Text.Primary
-                )
-            }
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(Mesh.Space.xl)) {
-                SummaryStat("Critical", counts.critical, Mesh.Signal.Emergency)
-                SummaryStat("Medical", counts.medical, Mesh.Signal.Warning)
-                SummaryStat("Supply", counts.supply, Mesh.Signal.Action)
-            }
-        }
-
-        TextButton(
-            onClick = onOpenCommand,
-            modifier = Modifier.heightIn(min = Mesh.TouchTarget)
-        ) {
-            Text(
-                "Open command centre",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = Mesh.Signal.Live
-            )
-        }
-    }
-}
-
-@Composable
-private fun SummaryStat(label: String, value: Int, color: androidx.compose.ui.graphics.Color) {
-    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.xs)) {
-        Text(
-            value.toString(),
-            style = MaterialTheme.typography.headlineMedium,
-            fontFamily = Mesh.Mono,
-            color = if (value > 0) color else Mesh.Text.Tertiary
-        )
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Mesh.Text.Tertiary)
-    }
-}
-
-/** Counts of what the map can actually plot. No preview engine, so no cost. */
-@Composable
-private fun MapSummary(data: MapData, onOpenMap: () -> Unit) {
-    MeshPanel {
-        SectionLabel("Disaster map")
-        Row(horizontalArrangement = Arrangement.spacedBy(Mesh.Space.xl)) {
-            SummaryStat(
-                "Located reports",
-                data.reports.size,
-                if (data.reports.isEmpty()) Mesh.Text.Tertiary else Mesh.Signal.Emergency
-            )
-            SummaryStat(
-                "Mapped nodes",
-                data.nodes.size,
-                if (data.nodes.isEmpty()) Mesh.Text.Tertiary else Mesh.Signal.Live
-            )
-        }
-        TextButton(
-            onClick = onOpenMap,
-            modifier = Modifier.heightIn(min = Mesh.TouchTarget)
-        ) {
-            Text(
-                "Open live map",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = Mesh.Signal.Live
-            )
-        }
-    }
-}
-
+/** Product name, node identity, and the way into the explainer. */
 @Composable
 private fun Identity(state: MeshState, onOpenInfo: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.sm)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.sm)) {
             Text(
                 "DisasterMesh",
                 style = MaterialTheme.typography.displaySmall,
                 color = Mesh.Text.Primary
             )
-            // Info lives here rather than in the bottom bar, which is capped at
-            // five destinations. Still one tap away.
-            Box(
-                modifier = Modifier
-                    .size(Mesh.TouchTarget)
-                    .background(Mesh.Surface.Card, CircleShape)
-                    .selectable(selected = false, onClick = onOpenInfo),
-                contentAlignment = Alignment.Center
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Filled.Info,
-                    contentDescription = "About DisasterMesh",
-                    tint = Mesh.Signal.Live,
-                    modifier = Modifier.size(20.dp)
+                Text(
+                    state.nodeId.ifBlank { "NODE-••••" },
+                    style = MaterialTheme.typography.labelLarge,
+                    fontFamily = Mesh.Mono,
+                    color = Mesh.Signal.Live,
+                    modifier = Modifier
+                        .background(Mesh.Surface.Raised, RoundedCornerShape(Mesh.Radius.sm))
+                        .padding(horizontal = Mesh.Space.md, vertical = Mesh.Space.xs)
                 )
+                if (state.deviceModel.isNotBlank()) {
+                    Text(
+                        state.deviceModel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Mesh.Text.Tertiary
+                    )
+                }
             }
         }
+        Icon(
+            Icons.Filled.Info,
+            contentDescription = "About DisasterMesh",
+            tint = Mesh.Text.Tertiary,
+            modifier = Modifier
+                .size(Mesh.TouchTarget)
+                .clickable(onClick = onOpenInfo)
+                .padding(Mesh.Space.md)
+        )
+    }
+}
+
+/**
+ * The network answer, compact.
+ *
+ * One status word, one figure, one control. This used to be a tall panel with
+ * four readouts and a separate full-width start button below it — the same
+ * information at three times the height.
+ */
+@Composable
+private fun NetworkBanner(
+    state: MeshState,
+    permissionsGranted: Boolean,
+    onStartMesh: () -> Unit,
+    onStopMesh: () -> Unit
+) {
+    val kind = when {
+        state.meshActive && state.isConnected -> MeshStatusKind.ACTIVE
+        state.meshActive && (state.advertising || state.discovering) -> MeshStatusKind.STARTING
+        state.meshActive -> MeshStatusKind.STARTING
+        else -> MeshStatusKind.OFFLINE
+    }
+    val count by animateFloatAsState(
+        state.connectedCount.toFloat(),
+        tween(320),
+        label = "peerCount"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Mesh.Surface.Card, RoundedCornerShape(Mesh.Radius.lg))
+            .padding(Mesh.Space.xl),
+        verticalArrangement = Arrangement.spacedBy(Mesh.Space.lg)
+    ) {
+        MeshStatus(kind)
+
         Row(
-            horizontalArrangement = Arrangement.spacedBy(Mesh.Space.md),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
         ) {
-            NodeTag(state.nodeId.ifBlank { "NODE-····" })
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Mesh.Space.md),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Text(
+                    count.toInt().toString(),
+                    style = MaterialTheme.typography.displayLarge,
+                    color = if (state.isConnected) Mesh.Text.Primary else Mesh.Text.Tertiary
+                )
+                Text(
+                    if (state.connectedCount == 1) "device\nconnected" else "devices\nconnected",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Mesh.Text.Secondary,
+                    modifier = Modifier.padding(bottom = Mesh.Space.sm)
+                )
+            }
+
+            MeshAction(
+                label = if (state.meshActive) "Stop" else "Start mesh",
+                onClick = { if (state.meshActive) onStopMesh() else onStartMesh() },
+                intent = if (state.meshActive) MeshIntent.SECONDARY else MeshIntent.PRIMARY,
+                enabled = permissionsGranted
+            )
+        }
+
+        if (state.pendingPeers.isNotEmpty()) {
             Text(
-                state.deviceModel,
+                "${state.pendingPeers.size} nearby, connecting…",
                 style = MaterialTheme.typography.bodySmall,
-                color = Mesh.Text.Tertiary
+                color = Mesh.Signal.Live
+            )
+        }
+    }
+}
+
+/** What the SOS will be tagged as. Horizontally scrollable so nothing clips. */
+@Composable
+private fun CategoryRow(
+    selected: MessageCategory,
+    onSelect: (MessageCategory) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm)
+    ) {
+        MessageCategory.entries.forEach { category ->
+            MeshChip(
+                label = category.label,
+                selected = category == selected,
+                onClick = { onSelect(category) },
+                accent = accentFor(category),
+                leadingDot = accentFor(category)
             )
         }
     }
 }
 
 /**
- * The hero readout. The connected-node count is the largest number on screen
- * because it is the thing that decides whether a message can go anywhere.
+ * Hybrid uplink, demoted to one honest line.
+ *
+ * It used to occupy a nine-row panel on Home AND an identical one on Command.
+ * On a mesh-first product the interesting fact is almost always "mesh only",
+ * which is one line long.
  */
 @Composable
-private fun MeshStatusCard(state: MeshState) {
-    val live = state.meshActive
-    MeshPanel(
-        background = if (live) Mesh.Surface.Card else Mesh.Surface.Sunken,
-        border = if (live) Mesh.Signal.LiveDeep.copy(alpha = 0.35f) else Mesh.Line.Subtle,
-        padding = Mesh.Space.xl
+private fun UplinkLine(status: UplinkStatus) {
+    val shape = RoundedCornerShape(Mesh.Radius.md)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Mesh.Surface.Card, shape)
+            .border(BorderStroke(1.dp, Mesh.Line.Subtle), shape)
+            .padding(horizontal = Mesh.Space.lg, vertical = Mesh.Space.lg),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            LiveDot(active = live, color = Mesh.Signal.Ok, size = 9)
+        Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.xs)) {
             Text(
-                if (live) "Mesh active" else "Mesh inactive",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (live) Mesh.Text.Primary else Mesh.Text.Tertiary
-            )
-        }
-
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                state.connectedCount.toString(),
-                fontSize = 52.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (state.isConnected) Mesh.Signal.Live else Mesh.Text.Tertiary
+                "UPLINK",
+                style = MaterialTheme.typography.labelSmall,
+                color = Mesh.Text.Tertiary
             )
             Text(
-                if (state.connectedCount == 1) "  connected node" else "  connected nodes",
+                if (status.hasExternalPath) status.transport.label else "Mesh only",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Mesh.Text.Secondary,
-                modifier = Modifier.padding(bottom = 10.dp)
+                fontWeight = FontWeight.SemiBold,
+                color = if (status.hasExternalPath) Mesh.Signal.Ok else Mesh.Text.Primary
             )
         }
-
-        // Capability chips carry icon + name + state, never colour alone.
-        Row(horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm)) {
-            StatusChip(
-                icon = Icons.Filled.Share,
-                label = "Advertising",
-                state = if (state.advertising) "on" else "off",
-                active = state.advertising
-            )
-            StatusChip(
-                icon = Icons.Filled.Search,
-                label = "Discovering",
-                state = if (state.discovering) "on" else "off",
-                active = state.discovering
-            )
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Filled.Info,
-                contentDescription = null,
-                tint = Mesh.Text.Tertiary,
-                modifier = Modifier.size(14.dp)
-            )
+        if (status.pending > 0) {
             Text(
-                "Internet not required",
+                "${status.pending} pending",
+                style = MaterialTheme.typography.bodySmall,
+                color = Mesh.Signal.Warning
+            )
+        } else {
+            Text(
+                "No external path",
                 style = MaterialTheme.typography.bodySmall,
                 color = Mesh.Text.Tertiary
             )
@@ -368,115 +390,10 @@ private fun MeshStatusCard(state: MeshState) {
     }
 }
 
-/** Shown only when the mesh genuinely failed to start a radio. */
-@Composable
-private fun MeshErrorCard(status: String, onOpenAppSettings: () -> Unit) {
-    MeshPanel(
-        background = Mesh.Signal.EmergencyDeep.copy(alpha = 0.16f),
-        border = Mesh.Signal.Emergency.copy(alpha = 0.5f)
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Mesh.Space.sm),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Filled.Warning,
-                contentDescription = null,
-                tint = Mesh.Signal.Emergency,
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                "Mesh unavailable",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Mesh.Text.Primary
-            )
-        }
-        // The status string is already a plain-language sentence, never a raw stack trace.
-        Text(status, style = MaterialTheme.typography.bodyMedium, color = Mesh.Text.Secondary)
-        Text(
-            "Check Bluetooth, Nearby devices and Location, then start the mesh again.",
-            style = MaterialTheme.typography.bodySmall,
-            color = Mesh.Text.Tertiary
-        )
-        TextButton(onClick = onOpenAppSettings) {
-            Text("Open app settings", color = Mesh.Signal.Live, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable
-private fun NearbyNodes(state: MeshState) {
-    Column(verticalArrangement = Arrangement.spacedBy(Mesh.Space.md)) {
-        SectionLabel("Nearby nodes")
-
-        if (state.connectedPeers.isEmpty() && state.pendingPeers.isEmpty()) {
-            // Empty state with guidance rather than a blank gap.
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Mesh.Surface.Card, RoundedCornerShape(Mesh.Radius.lg))
-                    .padding(Mesh.Space.xl),
-                verticalArrangement = Arrangement.spacedBy(Mesh.Space.sm)
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Mesh.Space.md),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Filled.Refresh,
-                        contentDescription = null,
-                        tint = Mesh.Signal.Live,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        "Looking for nodes…",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Mesh.Text.Primary
-                    )
-                }
-                Text(
-                    "Other phones running DisasterMesh connect on their own. " +
-                        "Keep them within about 30 metres — there is nothing to tap.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Mesh.Text.Tertiary
-                )
-            }
-        } else {
-            state.connectedPeers.forEach { peer ->
-                PeerRow(peer.nodeId, peer.deviceModel, connected = true)
-            }
-            state.pendingPeers.forEach { peer ->
-                PeerRow(peer.nodeId, "connecting…", connected = false)
-            }
-        }
-    }
-}
-
-@Composable
-private fun PeerRow(nodeId: String, detail: String, connected: Boolean) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Mesh.Surface.Card, RoundedCornerShape(Mesh.Radius.md))
-            .padding(horizontal = Mesh.Space.lg, vertical = Mesh.Space.md),
-        horizontalArrangement = Arrangement.spacedBy(Mesh.Space.md),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        LiveDot(active = connected, color = Mesh.Signal.Ok, size = 8)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                nodeId,
-                style = MaterialTheme.typography.bodyLarge,
-                fontFamily = Mesh.Mono,
-                color = Mesh.Text.Primary
-            )
-            Text(detail, style = MaterialTheme.typography.bodySmall, color = Mesh.Text.Tertiary)
-        }
-        Text(
-            if (connected) "Connected" else "Pending",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (connected) Mesh.Signal.Ok else Mesh.Signal.Warning
-        )
-    }
+/** Category accent, matching the single mapping used by the report screens. */
+private fun accentFor(category: MessageCategory): Color = when (category) {
+    MessageCategory.SAFE -> Mesh.Signal.Ok
+    MessageCategory.MEDICAL -> Mesh.Signal.Medical
+    MessageCategory.WARNING -> Mesh.Signal.Warning
+    MessageCategory.SUPPLY -> Mesh.Signal.Supply
 }
