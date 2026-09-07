@@ -1,0 +1,383 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   DISASTERMESH — RESCUE COMMAND CENTER
+   Design system: dark operations console.
+
+   Neutral ramp verified against WCAG 2.1 on surface-2 (#0B1020):
+     text      #F8FAFC  17.4:1
+     text-2    #CBD5E1  12.3:1
+     text-3    #94A3B8   7.1:1   <- lowest permitted for text
+     line-2    #64748B   3.8:1   <- NEVER text. Borders / disabled glyphs only.
+
+   Every emergency category has TWO tokens:
+     --cat-x        the MARK  (map pin, chart series, bar, rule) -> 3:1 target
+     --cat-x-text   the TEXT  (labels on dark surfaces)          -> 4.5:1 target
+   Using the mark hue for small text is the most common dark-UI a11y failure;
+   splitting the token makes it impossible here.
+   ========================================================================= */
+
+@theme {
+  /* --- surfaces ------------------------------------------------------- */
+  --color-void: #020617;
+  --color-surface-1: #060a16;
+  --color-surface-2: #0b1020;
+  --color-surface-3: #121829;
+  --color-surface-4: #1a2135;
+
+  --color-line: #1c2437;
+  --color-line-2: #2b3650;
+
+  --color-text: #f8fafc;
+  --color-text-2: #cbd5e1;
+  --color-text-3: #94a3b8;
+
+  /* --- emergency categories ------------------------------------------- */
+  --color-critical: #ef4444;
+  --color-critical-text: #f87171;
+  --color-medical: #f97316;
+  --color-medical-text: #fb923c;
+  --color-warning: #f59e0b;
+  --color-warning-text: #fbbf24;
+  --color-supply: #3b82f6;
+  --color-supply-text: #60a5fa;
+  --color-safe: #22c55e;
+  --color-safe-text: #4ade80;
+
+  /* --- operational roles ---------------------------------------------- */
+  --color-rescuer: #06b6d4;
+  --color-rescuer-text: #22d3ee;
+  --color-system: #8b5cf6;
+  --color-system-text: #a78bfa; /* #8B5CF6 measured 4.39:1 — failed. */
+  --color-hospital: #e2e8f0;
+  --color-hazard: #eab308;
+
+  /* --- type ------------------------------------------------------------ */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-jb), ui-monospace, "SF Mono", monospace;
+
+  /* --- geometry: sharp and technical, never pill-shaped ---------------- */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* --- motion: subtle. 3/10. ------------------------------------------- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+    min-width: 0;
+  }
+
+  html {
+    color-scheme: dark;
+    /* The shell is a fixed-height application frame. Without this the
+       document itself can be scrolled by scrollIntoView — overflow:hidden on
+       <body> alone does not prevent it — and the command bar disappears. */
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    background: var(--color-void);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    /* Tabular numerals everywhere: operational figures must not reflow
+       as they tick. This is the single highest-value type setting here. */
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "cv05" 1, "ss03" 1;
+    overflow: hidden; /* the app shell owns scrolling, not the document */
+  }
+
+  /* Visible, high-contrast focus. Never removed.
+     `!important` is deliberate: Tailwind's `focus:outline-none` lives in the
+     utilities layer and would otherwise silently win against this rule,
+     stripping the keyboard focus indicator from every field it is applied to.
+     Losing a focus ring is not a styling regression, it is a lockout. */
+  :focus-visible {
+    outline: 2px solid var(--color-rescuer-text) !important;
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-2);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3d4a68;
+    background-clip: content-box;
+  }
+}
+
+@layer utilities {
+  /* Section eyebrow: 11px is legible at this weight + tracking, and is
+     reserved for uppercase labels only — never for reading text. */
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-3);
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  .hairline {
+    border-color: var(--color-line);
+  }
+
+  /* Sunken inset used for map wells and log panels. */
+  .well {
+    background: var(--color-void);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.02);
+  }
+
+  .panel {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+  }
+
+  .scroll-y {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Restrained motion. A command centre that flickers is a command centre
+   nobody trusts, so exactly one thing pulses: an unassigned P0.
+   ------------------------------------------------------------------------ */
+@keyframes sos-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes ring-expand {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.75;
+  }
+  70% {
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.anim-sos {
+  animation: sos-pulse 2.1s ease-in-out infinite;
+}
+.anim-ring {
+  animation: ring-expand 2.1s ease-out infinite;
+}
+.anim-in {
+  animation: slide-in 220ms var(--ease-out) both;
+}
+.anim-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 33%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(34 211 238 / 0.5),
+    transparent
+  );
+  animation: sweep 1.15s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Leaflet, restyled to match the console. Defaults are light-mode and
+   would otherwise punch a bright hole through the whole interface.
+   ------------------------------------------------------------------------ */
+.leaflet-container {
+  /* Leaflet's own stylesheet is injected by the client-only map chunk, i.e.
+     AFTER this file, and its default #ddd container background would show
+     through every tile gap as a bright grey flash. This is a deliberate
+     third-party override, not a specificity accident. */
+  background: #070c18 !important;
+  font-family: var(--font-sans);
+  outline: none;
+}
+
+/* OpenStreetMap's standard tiles are a light basemap. Inverting and
+   re-rotating the hue turns them into a credible dark cartography, then the
+   saturation and contrast pull is what keeps the operational overlays the
+   brightest thing on screen. A provider-supplied dark style skips all of
+   this via .dm-tiles-plain. */
+.dm-tiles-dark {
+  filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(0.92) saturate(0.55)
+    sepia(0.12);
+}
+
+/* Leaflet blends tiles with plus-lighter to hide seams while fading. With
+   fading off and a filter on the layer, that only washes the basemap out. */
+.leaflet-container img.leaflet-tile {
+  mix-blend-mode: normal;
+}
+
+.dm-tiles-plain {
+  /* Already-dark cartography: pull it down a little further so the incident
+     overlays keep the top of the value range to themselves. */
+  filter: brightness(0.82) saturate(0.75) contrast(1.05);
+}
+
+/* Place names: readable, but never competing with a marker. Layer opacity is
+   set through react-leaflet's `opacity` prop, because Leaflet writes an inline
+   opacity on the layer element that CSS cannot win against. */
+.dm-tiles-labels {
+  filter: brightness(0.95) contrast(0.95);
+}
+
+.leaflet-bar,
+.leaflet-control-attribution {
+  border: 1px solid var(--color-line-2) !important;
+  background: rgb(11 16 32 / 0.92) !important;
+  color: var(--color-text-3) !important;
+  backdrop-filter: blur(6px);
+  box-shadow: none !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--color-text-3) !important;
+}
+
+.leaflet-control-attribution {
+  font-size: 10px !important;
+  border-radius: var(--radius-sm) 0 0 0;
+  padding: 2px 6px !important;
+}
+
+.leaflet-marker-icon,
+.leaflet-marker-icon * {
+  transition: transform 160ms var(--ease-out);
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--color-surface-3) !important;
+  color: var(--color-text) !important;
+  border: 1px solid var(--color-line-2);
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.6) !important;
+}
+
+.leaflet-popup-content {
+  margin: 10px 12px !important;
+  font-size: 12px;
+}
+
+.leaflet-container a.leaflet-popup-close-button {
+  color: var(--color-text-3) !important;
+}
+
+/* Interactive layers must show focus for keyboard map users. */
+.leaflet-interactive:focus-visible {
+  outline: 2px solid var(--color-rescuer-text);
+  outline-offset: 1px;
+}
+
+/* Leaflet tooltips: the default is a white callout, which would be the
+   brightest object on the entire console. */
+.leaflet-tooltip {
+  background: var(--color-surface-3) !important;
+  border: 1px solid var(--color-line-2) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--color-text-2) !important;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.6) !important;
+  padding: 6px 8px !important;
+  font-size: 11px !important;
+  white-space: normal !important;
+}
+
+.leaflet-tooltip-top::before {
+  border-top-color: var(--color-line-2) !important;
+}
+.leaflet-tooltip-bottom::before {
+  border-bottom-color: var(--color-line-2) !important;
+}
+.leaflet-tooltip-left::before {
+  border-left-color: var(--color-line-2) !important;
+}
+.leaflet-tooltip-right::before {
+  border-right-color: var(--color-line-2) !important;
+}
+
+/* divIcon wrappers must not paint their own box. */
+.dm-marker {
+  background: transparent;
+  border: 0;
+}
